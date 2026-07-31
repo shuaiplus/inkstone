@@ -30,6 +30,7 @@ const apiCodeMessages: Record<string, MessageKey> = {
     too_many_attempts: 'api.error.too_many_attempts',
     registration_closed: 'api.error.registration_closed',
     server_misconfigured: 'api.error.server_misconfigured',
+    invalid_response: 'api.error.invalid_response',
 };
 const englishMessageKeys = new Map<string, MessageKey>(Object.entries(EN_US_MESSAGES).map(([key, value]) => [value, key as MessageKey]));
 let locale: AppLocale = detectInitialLocale();
@@ -46,8 +47,15 @@ export function t(key: MessageKey, params?: Params): string {
 }
 export function translateApiError(code: string, fallback: string): string {
     const key = apiCodeMessages[code];
-    if (key)
+    if (key) {
+        // server_misconfigured and invalid_response carry concrete failure reasons (e.g.
+        // "Image generation failed (HTTP 400): ..."). translateServiceMessage's fallback
+        // misclassifies any "HTTP xxx" message as a storage service error, so return the
+        // fallback as-is to preserve the accurate diagnostic information.
+        if ((code === 'server_misconfigured' || code === 'invalid_response') && fallback)
+            return fallback;
         return t(key);
+    }
     return fallback ? translateServiceMessage(fallback) : t('api.error.unknown');
 }
 export function translateServiceMessage(message: string | null | undefined): string {

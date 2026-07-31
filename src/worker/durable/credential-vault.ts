@@ -6,9 +6,10 @@ const MASTER_KEY_BYTES = 32
 const MAX_REQUEST_BYTES = 24 * 1024
 const MAX_CIPHERTEXT_LENGTH = 24 * 1024
 const BACKUP_SCOPE_PATTERN = /^backup:[0-9a-hjkmnp-tv-z]{26}$/
+const AI_SCOPE_PATTERN = /^ai:instance$/
 const CIPHERTEXT_PATTERN = /^v1\.([A-Za-z0-9_-]+)$/
 const HKDF_SALT = utf8('inkstone.backup-credentials.v1')
-const ALLOWED_SECRET_FIELDS = new Set(['password', 'accessKeyId', 'secretAccessKey'])
+const ALLOWED_SECRET_FIELDS = new Set(['password', 'accessKeyId', 'secretAccessKey', 'apiKey'])
 
 type CredentialRecord = Record<string, string>
 
@@ -147,7 +148,10 @@ async function readBody(request: Request): Promise<Record<string, unknown> | nul
 }
 
 function isScope(value: unknown): value is string {
-  return typeof value === 'string' && BACKUP_SCOPE_PATTERN.test(value)
+  return (
+    typeof value === 'string' &&
+    (BACKUP_SCOPE_PATTERN.test(value) || AI_SCOPE_PATTERN.test(value))
+  )
 }
 
 function isCredentialRecord(value: unknown): value is CredentialRecord {

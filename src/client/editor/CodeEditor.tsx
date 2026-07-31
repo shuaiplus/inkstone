@@ -26,15 +26,16 @@ export interface CodeEditorProps {
     onReady?: (view: EditorView | null) => void;
     onScroll?: (view: EditorView) => void;
     onCursorLine?: (line: number) => void;
+    onSelectionChange?: (view: EditorView) => void;
     placeholder?: string;
     className?: string;
 }
-export function CodeEditor({ value, onChange, settings, sources, handlers, onReady, onScroll, onCursorLine, placeholder = t("editor.start_writing"), className, }: CodeEditorProps) {
+export function CodeEditor({ value, onChange, settings, sources, handlers, onReady, onScroll, onCursorLine, onSelectionChange, placeholder = t("editor.start_writing"), className, }: CodeEditorProps) {
     const hostRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
 
-    const cbRef = useRef({ onChange, onScroll, onCursorLine, sources, handlers });
-    cbRef.current = { onChange, onScroll, onCursorLine, sources, handlers };
+    const cbRef = useRef({ onChange, onScroll, onCursorLine, onSelectionChange, sources, handlers });
+    cbRef.current = { onChange, onScroll, onCursorLine, onSelectionChange, sources, handlers };
     useEffect(() => {
         const host = hostRef.current;
         if (!host)
@@ -110,6 +111,9 @@ export function CodeEditor({ value, onChange, settings, sources, handlers, onRea
                 if (update.selectionSet && cbRef.current.onCursorLine) {
                     const line = update.state.doc.lineAt(update.state.selection.main.head).number;
                     cbRef.current.onCursorLine(line);
+                }
+                if (update.selectionSet && cbRef.current.onSelectionChange) {
+                    cbRef.current.onSelectionChange(update.view);
                 }
             }),
             EditorView.domEventHandlers({

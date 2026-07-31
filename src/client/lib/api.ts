@@ -23,6 +23,14 @@ import type {
   Tag,
   TestConnectionResult,
   UserSettings,
+  AiContentRequest,
+  AiContinueRequest,
+  AiDraftRequest,
+  AiEditRequest,
+  AiImageRequest,
+  AiImageResponse,
+  AiConfig,
+  AiConfigPatch,
 } from '@shared/types'
 import { publishBroadcast } from './db'
 import { getLocale, t, translateApiError } from './i18n'
@@ -357,10 +365,93 @@ export const api = {
       return request<ImportResult>('/api/import', { method: 'POST', formData: form })
     },
   },
+
+  ai: {
+    stream: (
+      task: 'summarize' | 'polish' | 'draft' | 'edit' | 'continue',
+      body: AiContentRequest | AiDraftRequest | AiEditRequest | AiContinueRequest,
+      onDelta: (chunk: string) => void,
+      signal?: AbortSignal,
+    ): Promise<void> => streamAi(`/api/ai/${task}`, body, onDelta, signal),
+    image: (body: AiImageRequest, signal?: AbortSignal) =>
+      request<AiImageResponse>('/api/ai/image', { method: 'POST', body, signal }),
+    getConfig: () => request<AiConfig>('/api/ai/config'),
+    saveConfig: (body: AiConfigPatch) =>
+      request<AiConfig>('/api/ai/config', { method: 'PUT', body }),
+  },
 }
 
 function toQuery(params: Record<string, string | number | undefined>): string {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
   if (!entries.length) return ''
   return `?${entries.map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')}`
+}
+
+async function streamAi(
+  path: string,
+  body: AiContentRequest | AiDraftRequest | AiEditRequest | AiContinueRequest,
+  onDelta: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      [CLIENT_HEADER]: '1',
+      'X-Inkstone-Origin': CLIENT_ID,
+      'Accept-Language': getLocale(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ...body, locale: body.locale ?? getLocale() }),
+    credentials: 'same-origin',
+    signal,
+  })
+
+  if (!response.ok) {
+    const data = isJsonResponse(response) ? await response.json().catch(() => null) : null
+    const error = (data as { error?: { code: string; message: string; details?: unknown } } | null)?.error
+    const code = error?.code ?? 'unknown'
+    const fallback = error?.message ?? t('api.request_failed_status', { status: response.status })
+    throw new ApiError(response.status, code, translateApiError(code, fallback), error?.details)
+  }
+
+  if (!response.body) throw new ApiError(502, 'invalid_response', t('api.invalid_server_response'))
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let eventName = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const parts = buffer.split('\n')
+      buffer = parts.pop() ?? ''
+      for (const raw of parts) {
+        const line = raw.replace(/\r$/, '')
+        if (line === '') {
+          eventName = ''
+          continue
+        }
+        if (line.startsWith('event:')) {
+          eventName = line.slice(6).trim()
+          continue
+        }
+        if (!line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (data === '[DONE]') return
+        try {
+          const parsed = JSON.parse(data) as string
+          if (eventName === 'error') {
+            throw new ApiError(502, 'server_misconfigured', typeof parsed === 'string' ? parsed : 'AI request failed')
+          }
+          if (typeof parsed === 'string') onDelta(parsed)
+        } catch (err) {
+          if (err instanceof ApiError) throw err
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }

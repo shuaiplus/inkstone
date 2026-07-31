@@ -46,6 +46,37 @@ export async function decryptSecret<T>(env: Env, info: string, stored: string): 
   }
 }
 
+export async function encryptAiKey(env: Env, apiKey: string): Promise<string> {
+  if (!apiKey) throw new Error('invalid_ai_key')
+  const response = await vaultRequest(env, '/encrypt', { scope: 'ai:instance', value: { apiKey } })
+  if (!response.ok) throw new CryptoUnavailableError()
+  const body: unknown = await response.json().catch(() => null)
+  const ciphertext = readStringField(body, 'ciphertext')
+  if (!ciphertext || ciphertext.length > 24 * 1024) throw new CryptoUnavailableError()
+  return ciphertext
+}
+
+export async function decryptAiKey(env: Env, stored: string): Promise<string | null> {
+  if (stored.length > 24 * 1024) return null
+  try {
+    const response = await vaultRequest(env, '/decrypt', {
+      scope: 'ai:instance',
+      ciphertext: stored,
+    })
+    if (response.status === 422) return null
+    if (!response.ok) throw new CryptoUnavailableError()
+    const body: unknown = await response.json().catch(() => null)
+    if (!body || typeof body !== 'object' || Array.isArray(body) || !('value' in body)) return null
+    const value = (body as { value: unknown }).value
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const apiKey = (value as Record<string, unknown>).apiKey
+    return typeof apiKey === 'string' && apiKey.length > 0 ? apiKey : null
+  } catch (error) {
+    if (error instanceof CryptoUnavailableError) throw error
+    throw new CryptoUnavailableError()
+  }
+}
+
 async function vaultRequest(env: Env, path: '/encrypt' | '/decrypt', body: unknown): Promise<Response> {
   if (!env.CREDENTIAL_VAULT) throw new CryptoUnavailableError()
   try {

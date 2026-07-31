@@ -14,6 +14,12 @@ export interface Env {
   CREDENTIAL_VAULT?: DurableObjectNamespace
 
   APP_NAME?: string
+
+  OPENAI_API_KEY?: string
+
+  OPENAI_BASE_URL?: string
+
+  OPENAI_MODEL?: string
 }
 
 export interface DatabaseState {
