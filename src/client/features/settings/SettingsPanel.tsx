@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Cloud, Database, Info, Keyboard, Palette, RefreshCw, Type, UserRound, X, } from 'lucide-react';
+import { Cloud, Database, Info, Keyboard, Palette, RefreshCw, Sparkles, Type, UserRound, X, } from 'lucide-react';
 import { ACCENTS } from '@shared/constants';
 import { cn } from '../../lib/cn';
 import { Tooltip, useDialogFocus, useEscape, useLockScroll } from '../../components/overlay';
@@ -12,10 +12,11 @@ import { SyncSettings } from './SyncSettings';
 import { DataSettings } from './DataSettings';
 import { AccountSettings } from './AccountSettings';
 import { AboutSettings } from './AboutSettings';
+import { AiSettings } from './AiSettings';
 import { useUi } from '../../store/ui';
 import { t } from "../../lib/i18n";
 const BackupSettings = lazy(() => import('./BackupSettings').then((m) => ({ default: m.BackupSettings })));
-type Section = 'appearance' | 'editor' | 'backup' | 'sync' | 'account' | 'data' | 'about';
+type Section = 'appearance' | 'editor' | 'backup' | 'sync' | 'account' | 'data' | 'ai' | 'about';
 const SECTIONS: {
     id: Section;
     label: () => string;
@@ -25,6 +26,7 @@ const SECTIONS: {
     { id: 'editor', label: () => t("settings.editor"), icon: <Type size={14}/> },
     { id: 'backup', label: () => t("settings.backup"), icon: <Cloud size={14}/> },
     { id: 'sync', label: () => t("settings.sync"), icon: <RefreshCw size={14}/> },
+    { id: 'ai', label: () => t("settings.ai"), icon: <Sparkles size={14}/> },
     { id: 'account', label: () => t("settings.account"), icon: <UserRound size={14}/> },
     { id: 'data', label: () => t("settings.data"), icon: <Database size={14}/> },
     { id: 'about', label: () => t("settings.about"), icon: <Info size={14}/> },
@@ -94,6 +96,7 @@ export function SettingsPanel({ onClose }: {
             {section === 'sync' && <SyncSettings />}
             {section === 'account' && <AccountSettings />}
             {section === 'data' && <DataSettings />}
+            {section === 'ai' && <AiSettings />}
             {section === 'about' && <AboutSettings />}
             {section === 'backup' && (<Suspense fallback={<LoadingBlock label={t("settings.loading_backup_settings")}/>}>
                 <BackupSettings />

@@ -14,6 +14,7 @@ import { backupRoutes } from './routes/backup'
 import { settingsRoutes } from './routes/settings'
 import { shareManageRoutes, sharePageRoutes, shareRoutes } from './routes/share'
 import { transferRoutes } from './routes/transfer'
+import { aiRoutes } from './routes/ai'
 import type { AppBindings } from './env'
 import { selectAttachmentStorage } from './attachments/backend'
 
@@ -76,6 +77,7 @@ export function createApp() {
   app.route('/api/settings', settingsRoutes)
   app.route('/api/share', shareManageRoutes)
   app.route('/api/public', shareRoutes)
+  app.route('/api/ai', aiRoutes)
   app.route('/api', transferRoutes)
 
   app.all('/api/*', () => {

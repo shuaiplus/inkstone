@@ -1,11 +1,16 @@
 import { useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { Blocks, Bold, Braces, ChevronDown, Code, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Minus, Network, Quote, Sigma, Strikethrough, Table, } from 'lucide-react';
+import { Blocks, Bold, Braces, ChevronDown, Code, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Minus, Network, Quote, Sigma, Sparkles, Strikethrough, Table, } from 'lucide-react';
 import { IconButton } from '../../components/primitives';
 import { Menu, Tooltip, type MenuItem } from '../../components/overlay';
 import { cn } from '../../lib/cn';
 import { insertAdvancedCodeBlock, insertBlockId, insertCallout, insertCodeBlock, insertDefinitionList, insertDetails, insertFootnote, insertFrontMatter, insertHorizontalRule, insertImage, insertLink, insertMermaid, insertPandocAttributes, insertTable, insertTabs, insertTag, insertText, setHeading, toggleBlockReference, toggleBold, toggleBulletList, toggleHighlight, toggleInlineCode, toggleInlineMath, toggleInserted, toggleItalic, toggleNoteEmbed, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleSubscript, toggleSuperscript, toggleTaskList, toggleWikiLink, } from '../../editor/commands';
+import { runAiIntoEditor, type AiMode, type AiTask } from '../../lib/ai-stream';
+import { useUi } from '../../store/ui';
 import { t } from "../../lib/i18n";
+import { AiInlinePrompt } from './AiInlinePrompt';
+import { AiSelectionBubble } from './AiSelectionBubble';
+import { AiGeneratingBar } from './AiGeneratingBar';
 export function EditorToolbar({ view, onPickImage, mobile = false, }: {
     view: EditorView | null;
     onPickImage: () => void;
@@ -15,8 +20,13 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
     const inlineRef = useRef<HTMLButtonElement>(null);
     const noteRef = useRef<HTMLButtonElement>(null);
     const blockRef = useRef<HTMLButtonElement>(null);
-    const [openMenu, setOpenMenu] = useState<'heading' | 'inline' | 'note' | 'block' | null>(null);
-    const toggleMenu = (menu: 'heading' | 'inline' | 'note' | 'block') => {
+    const aiRef = useRef<HTMLButtonElement>(null);
+    const [openMenu, setOpenMenu] = useState<'heading' | 'inline' | 'note' | 'block' | 'ai' | null>(null);
+    const [aiRunning, setAiRunning] = useState<{ task: AiTask; controller: AbortController } | null>(null);
+    const [inlinePrompt, setInlinePrompt] = useState<{ open: boolean; mode: 'draft' | 'edit' }>({ open: false, mode: 'draft' });
+    const toast = useUi((s) => s.toast);
+    const aiDrafting = aiRunning !== null;
+    const toggleMenu = (menu: 'heading' | 'inline' | 'note' | 'block' | 'ai') => {
         setOpenMenu((current) => current === menu ? null : menu);
     };
     const run = (command: (target: EditorView) => boolean) => () => {
@@ -56,6 +66,54 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
         { id: 'tabs', label: t("common.tabs"), onSelect: run(insertTabs) },
         { id: 'pandoc-attributes', label: t("workspace.pandoc_attributes"), onSelect: run(insertPandocAttributes), separatorBefore: true },
         { id: 'front-matter', label: 'Front Matter', onSelect: run(insertFrontMatter) },
+    ];
+    const runAi = (task: AiTask, mode: AiMode, prompt?: string) => {
+        if (!view || aiRunning) return;
+        const controller = new AbortController();
+        setAiRunning({ task, controller });
+        setOpenMenu(null);
+        runAiIntoEditor({ view, task, mode, toast, signal: controller.signal, prompt })
+            .catch(() => {})
+            .finally(() => setAiRunning(null));
+    };
+    const cancelAi = () => {
+        if (!aiRunning) return;
+        aiRunning.controller.abort();
+        toast({ title: t('ai.generation_canceled'), tone: 'default' });
+    };
+    const hasSelection = !!view && view.state.selection.main.from !== view.state.selection.main.to;
+    const hasContent = !!view && view.state.doc.toString().trim().length > 0;
+    const aiItems: MenuItem[] = [
+        {
+            id: 'ai-polish',
+            label: t('ai.polish_selection'),
+            disabled: !hasSelection,
+            onSelect: () => runAi('polish', 'replace'),
+        },
+        {
+            id: 'ai-summarize',
+            label: t('ai.summarize_insert'),
+            disabled: !hasContent,
+            onSelect: () => runAi('summarize', 'append'),
+        },
+        {
+            id: 'ai-edit',
+            label: t('ai.ask_ai_to_edit'),
+            disabled: !hasSelection,
+            separatorBefore: true,
+            onSelect: () => {
+                setOpenMenu(null);
+                setInlinePrompt({ open: true, mode: 'edit' });
+            },
+        },
+        {
+            id: 'ai-draft',
+            label: t('ai.draft_here'),
+            onSelect: () => {
+                setOpenMenu(null);
+                setInlinePrompt({ open: true, mode: 'draft' });
+            },
+        },
     ];
     return (<div className={cn('flex shrink-0 items-center overflow-x-auto border-b border-[var(--border-subtle)] px-2 no-scrollbar', mobile ? 'h-11 gap-1' : 'h-9 gap-0.5')}>
       <Tooltip label={t("workspace.title_748d7d")}>
@@ -128,10 +186,35 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
         <Blocks size={14}/>
       </MenuButton>
 
+      <Divider />
+
+      <Tooltip label={t('ai.assistant')}>
+        <button ref={aiRef} type="button" onClick={() => toggleMenu('ai')} disabled={aiDrafting} aria-label={t('ai.assistant')} aria-haspopup="menu" aria-expanded={openMenu === 'ai'} className={cn('inline-flex shrink-0 items-center gap-0.5 rounded-[var(--r-md)] px-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-50', mobile ? 'h-9' : 'h-7', aiDrafting && 'text-[var(--accent)]')}>
+          <Sparkles size={14}/>
+          <ChevronDown size={10} className="opacity-60"/>
+        </button>
+      </Tooltip>
+
       <Menu anchor={headingRef} open={openMenu === 'heading'} onClose={() => setOpenMenu(null)} items={headingItems} width={168} label={t("workspace.title_level")}/>
       <Menu anchor={inlineRef} open={openMenu === 'inline'} onClose={() => setOpenMenu(null)} items={inlineItems} width={184} label={t("workspace.more_inline_styles")}/>
       <Menu anchor={noteRef} open={openMenu === 'note'} onClose={() => setOpenMenu(null)} items={noteItems} width={184} label={t("workspace.note_syntax")}/>
       <Menu anchor={blockRef} open={openMenu === 'block'} onClose={() => setOpenMenu(null)} items={blockItems} width={192} label={t("workspace.more_blocks")}/>
+      <Menu anchor={aiRef} open={openMenu === 'ai'} onClose={() => setOpenMenu(null)} items={aiItems} width={220} label={t('ai.assistant')}/>
+
+      <AiSelectionBubble view={view} running={aiDrafting} onRun={runAi} />
+      <AiInlinePrompt
+        view={view}
+        open={inlinePrompt.open}
+        mode={inlinePrompt.mode}
+        onClose={() => setInlinePrompt((s) => ({ ...s, open: false }))}
+        onSubmit={(prompt) => {
+          const mode: AiMode = inlinePrompt.mode === 'edit' ? 'replace' : 'insert';
+          const task: AiTask = inlinePrompt.mode === 'edit' ? 'edit' : 'draft';
+          setInlinePrompt((s) => ({ ...s, open: false }));
+          runAi(task, mode, prompt);
+        }}
+      />
+      {aiRunning && <AiGeneratingBar task={aiRunning.task} onCancel={cancelAi} />}
     </div>);
 }
 function MenuButton({ buttonRef, label, open, onClick, children, mobile = false, }: {

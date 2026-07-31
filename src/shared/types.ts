@@ -439,6 +439,38 @@ export interface ApiErrorBody {
   }
 }
 
+export type AiTask = 'summarize' | 'polish' | 'draft' | 'edit'
+
+export interface AiContentRequest {
+  content: string
+  selection?: string
+  locale?: AppLocale
+}
+
+export interface AiDraftRequest {
+  topic: string
+  locale?: AppLocale
+}
+
+export interface AiEditRequest {
+  instruction: string
+  content: string
+  selection?: string
+  locale?: AppLocale
+}
+
+export interface AiConfig {
+  baseUrl: string
+  model: string
+  hasKey: boolean
+}
+
+export interface AiConfigPatch {
+  baseUrl?: string
+  model?: string
+  apiKey?: string | null
+}
+
 export type ApiErrorCode =
   | 'unauthenticated'
   | 'forbidden'
