@@ -360,6 +360,58 @@
   animation: ink-slide-right var(--dur-base) var(--ease-out) both;
 }
 
+@keyframes ink-ai-pulse {
+  0%, 100% { opacity: 1; transform: scaleY(1); }
+  50% { opacity: 0.4; transform: scaleY(0.6); }
+}
+@keyframes ink-ai-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 30%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 10%, transparent); }
+}
+@keyframes ink-ai-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.ai-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background: var(--accent);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  animation: ink-ai-pulse 1s ease-in-out infinite;
+}
+
+.ai-brand-gradient {
+  background: linear-gradient(135deg,
+    color-mix(in oklab, var(--accent) 85%, #6366f1 15%),
+    color-mix(in oklab, var(--accent) 60%, #8b5cf6 40%)
+  );
+}
+
+.ai-brand-text {
+  background: linear-gradient(135deg,
+    color-mix(in oklab, var(--accent) 85%, #6366f1 15%),
+    color-mix(in oklab, var(--accent) 60%, #8b5cf6 40%)
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.ai-shimmer-bg {
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--accent) 8%, transparent) 0%,
+    color-mix(in oklab, var(--accent) 18%, transparent) 50%,
+    color-mix(in oklab, var(--accent) 8%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: ink-ai-shimmer 1.6s ease-in-out infinite;
+}
+
 .skeleton {
   background:
     linear-gradient(

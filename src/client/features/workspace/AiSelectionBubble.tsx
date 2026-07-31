@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { EditorView } from '@codemirror/view'
-import { Sparkles, Wand2, Scissors, Maximize2, Minimize2, SpellCheck, X } from 'lucide-react'
+import {
+  Sparkles,
+  Wand2,
+  Scissors,
+  Maximize2,
+  Minimize2,
+  SpellCheck,
+  X,
+  ImagePlus,
+  ArrowRight,
+} from 'lucide-react'
 import { t } from '../../lib/i18n'
 import type { AiTask, AiMode } from '../../lib/ai-stream'
 
@@ -9,6 +19,7 @@ export interface AiSelectionBubbleProps {
   view: EditorView | null
   running: boolean
   onRun: (task: AiTask, mode: AiMode, prompt?: string) => void
+  onImage: () => void
 }
 
 interface BubblePos {
@@ -25,7 +36,7 @@ interface QuickAction {
   prompt?: string
 }
 
-export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubbleProps) {
+export function AiSelectionBubble({ view, running, onRun, onImage }: AiSelectionBubbleProps) {
   const [hasSelection, setHasSelection] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [pos, setPos] = useState<BubblePos | null>(null)
@@ -54,13 +65,11 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
     setPos({ top: coords.top - rect.top - 8, left: coords.left - rect.left })
   }, [view, running])
 
-  // Listen to editor DOM events for selection changes
   useEffect(() => {
     if (!view) return
     const dom = view.dom
     const onSelect = () => {
       window.clearTimeout(hideTimerRef.current)
-      // small delay to let selection settle after mousedown/mouseup
       hideTimerRef.current = window.setTimeout(checkSelection, 10)
     }
     const onScroll = () => {
@@ -79,7 +88,6 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
     }
   }, [view, checkSelection, hasSelection])
 
-  // Hide when selection becomes empty (also catches clicking away)
   useEffect(() => {
     if (!view || expanded) return
     const check = () => {
@@ -93,7 +101,6 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
     return () => window.clearInterval(id)
   }, [view, expanded])
 
-  // Reposition on scroll/resize
   useLayoutEffect(() => {
     if (!hasSelection || !view) return
     const reposition = () => checkSelection()
@@ -101,7 +108,6 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
     return () => window.removeEventListener('resize', reposition)
   }, [hasSelection, view, checkSelection])
 
-  // Focus input when expanded
   useEffect(() => {
     if (expanded) {
       const id = window.setTimeout(() => inputRef.current?.focus(), 0)
@@ -111,7 +117,6 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
     }
   }, [expanded])
 
-  // Hide on Escape
   useEffect(() => {
     if (!expanded) return
     const onKey = (e: KeyboardEvent) => {
@@ -144,16 +149,15 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
   }
 
   const quickActions: QuickAction[] = [
-    { id: 'polish', label: t('ai.polish'), icon: <Wand2 size={13} />, task: 'polish', mode: 'replace' },
-    { id: 'shorter', label: t('ai.make_shorter'), icon: <Minimize2 size={13} />, task: 'edit', mode: 'replace', prompt: t('ai.make_shorter') },
-    { id: 'longer', label: t('ai.make_longer'), icon: <Maximize2 size={13} />, task: 'edit', mode: 'replace', prompt: t('ai.make_longer') },
-    { id: 'grammar', label: t('ai.fix_grammar'), icon: <SpellCheck size={13} />, task: 'edit', mode: 'replace', prompt: t('ai.fix_grammar') },
-    { id: 'summarize', label: t('ai.summarize'), icon: <Scissors size={13} />, task: 'summarize', mode: 'insert' },
+    { id: 'polish', label: t('ai.polish'), icon: <Wand2 size={14} />, task: 'polish', mode: 'replace' },
+    { id: 'shorter', label: t('ai.make_shorter'), icon: <Minimize2 size={14} />, task: 'edit', mode: 'replace', prompt: t('ai.make_shorter') },
+    { id: 'longer', label: t('ai.make_longer'), icon: <Maximize2 size={14} />, task: 'edit', mode: 'replace', prompt: t('ai.make_longer') },
+    { id: 'grammar', label: t('ai.fix_grammar'), icon: <SpellCheck size={14} />, task: 'edit', mode: 'replace', prompt: t('ai.fix_grammar') },
+    { id: 'summarize', label: t('ai.summarize'), icon: <Scissors size={14} />, task: 'summarize', mode: 'insert' },
   ]
 
   if (!hasSelection || !pos || running) return null
 
-  // Place above selection; flip below if not enough space above
   const flipDown = pos.top < 60
   const editorWidth = view?.dom.clientWidth ?? 800
   const finalStyle: React.CSSProperties = {
@@ -170,29 +174,44 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-default)] bg-[var(--bg-overlay)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-secondary)] shadow-[var(--shadow-pop)] backdrop-blur transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+          className="ai-brand-gradient inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium text-white shadow-[var(--shadow-pop)] transition-transform hover:scale-[1.03] active:scale-95"
         >
-          <Sparkles size={13} className="text-[var(--accent)]" />
+          <Sparkles size={13} />
           {t('ai.ask_ai')}
         </button>
       ) : (
         <div className="w-[320px] overflow-hidden rounded-[var(--r-lg)] border border-[var(--border-default)] bg-[var(--bg-overlay)] shadow-[var(--shadow-pop)] backdrop-blur">
-          {/* Quick actions row */}
-          <div className="flex flex-wrap items-center gap-1 border-b border-[var(--border-subtle)] p-1.5">
-            {quickActions.map((action) => (
+          {/* Quick actions grid */}
+          <div className="p-1.5">
+            <div className="grid grid-cols-3 gap-0.5">
+              {quickActions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={() => runQuick(action)}
+                  className="flex flex-col items-center gap-1 rounded-[var(--r-sm)] px-1 py-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                >
+                  <span className="text-[var(--accent)]">{action.icon}</span>
+                  <span className="text-[10.5px] font-medium leading-tight">{action.label}</span>
+                </button>
+              ))}
               <button
-                key={action.id}
                 type="button"
-                onClick={() => runQuick(action)}
-                className="inline-flex items-center gap-1 rounded-[var(--r-sm)] px-2 py-1 text-[11.5px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                onClick={() => {
+                  onImage()
+                  setExpanded(false)
+                }}
+                className="flex flex-col items-center gap-1 rounded-[var(--r-sm)] px-1 py-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
               >
-                {action.icon}
-                <span>{action.label}</span>
+                <span className="text-[var(--accent)]"><ImagePlus size={14} /></span>
+                <span className="text-[10.5px] font-medium leading-tight">{t('ai.task_image')}</span>
               </button>
-            ))}
+            </div>
           </div>
+          {/* Divider */}
+          <div className="mx-2 border-t border-[var(--border-subtle)]" />
           {/* Custom instruction input */}
-          <div className="flex items-end gap-2 p-2">
+          <div className="p-2">
             <textarea
               ref={inputRef}
               value={instruction}
@@ -200,14 +219,14 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
               onKeyDown={onKeyDown}
               placeholder={t('ai.suggest_placeholder')}
               rows={2}
-              className="min-h-[44px] flex-1 resize-none rounded-[var(--r-sm)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-2 py-1.5 text-[12.5px] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-ring)] focus:outline-none"
+              className="min-h-[44px] w-full resize-none rounded-[var(--r-sm)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-2 py-1.5 text-[12.5px] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-ring)] focus:outline-none"
             />
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="mt-1.5 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => setExpanded(false)}
                 aria-label={t('common.close')}
-                className="inline-flex size-7 items-center justify-center rounded-[var(--r-sm)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
+                className="inline-flex size-6 items-center justify-center rounded-[var(--r-sm)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]"
               >
                 <X size={13} />
               </button>
@@ -215,10 +234,10 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
                 type="button"
                 onClick={runCustom}
                 disabled={!instruction.trim()}
-                className="inline-flex items-center gap-1 rounded-[var(--r-sm)] bg-[var(--accent)] px-2.5 py-1.5 text-[11.5px] font-medium text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
+                className="ai-brand-gradient inline-flex items-center gap-1 rounded-[var(--r-sm)] px-2.5 py-1.5 text-[11.5px] font-medium text-white transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-40"
               >
-                <Sparkles size={12} />
                 {t('ai.replace')}
+                <ArrowRight size={11} />
               </button>
             </div>
           </div>

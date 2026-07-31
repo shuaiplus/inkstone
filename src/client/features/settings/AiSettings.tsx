@@ -16,6 +16,8 @@ export function AiSettings() {
   const [saving, setSaving] = useState(false)
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
+  const [imageModel, setImageModel] = useState('')
+  const [imageMethod, setImageMethod] = useState<'generations' | 'responses'>('generations')
   const [apiKey, setApiKey] = useState('')
   const [keyDirty, setKeyDirty] = useState(false)
   const mountedRef = useRef(true)
@@ -41,6 +43,8 @@ export function AiSettings() {
         setConfig(cfg)
         setBaseUrl(cfg.baseUrl)
         setModel(cfg.model)
+        setImageModel(cfg.imageModel)
+        setImageMethod(cfg.imageMethod)
       })
       .catch((err) => {
         if (!mountedRef.current) return
@@ -59,9 +63,11 @@ export function AiSettings() {
     if (saving) return
     setSaving(true)
     try {
-      const patch: { baseUrl?: string; model?: string; apiKey?: string | null } = {}
+      const patch: { baseUrl?: string; model?: string; imageModel?: string; imageMethod?: 'generations' | 'responses'; apiKey?: string | null } = {}
       if (baseUrl !== (config?.baseUrl ?? '')) patch.baseUrl = baseUrl.trim()
       if (model !== (config?.model ?? '')) patch.model = model.trim()
+      if (imageModel !== (config?.imageModel ?? '')) patch.imageModel = imageModel.trim()
+      if (imageMethod !== (config?.imageMethod ?? 'generations')) patch.imageMethod = imageMethod
       if (keyDirty) {
         patch.apiKey = apiKey.trim() === '' ? null : apiKey
       }
@@ -70,6 +76,8 @@ export function AiSettings() {
       setConfig(updated)
       setBaseUrl(updated.baseUrl)
       setModel(updated.model)
+      setImageModel(updated.imageModel)
+      setImageMethod(updated.imageMethod)
       setApiKey('')
       setKeyDirty(false)
       toast({ title: t('ai.config_saved'), tone: 'success' })
@@ -155,6 +163,48 @@ export function AiSettings() {
                 onChange={(e) => setModel(e.target.value)}
                 placeholder="gpt-4o-mini"
               />
+            </div>
+          </SettingRow>
+
+          <SettingRow title={t('ai.image_model')} description={t('ai.image_model_description')}>
+            <div className="w-full md:w-[280px]">
+              <Input
+                value={imageModel}
+                onChange={(e) => setImageModel(e.target.value)}
+                placeholder="dall-e-3"
+                disabled={imageMethod === 'responses'}
+              />
+            </div>
+          </SettingRow>
+
+          <SettingRow title={t('ai.image_method')} description={t('ai.image_method_description')}>
+            <div className="w-full md:w-[280px]">
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setImageMethod('generations')}
+                  className={
+                    'flex-1 rounded-[var(--r-md)] border px-2.5 py-2 text-[12px] font-medium transition-colors ' +
+                    (imageMethod === 'generations'
+                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                      : 'border-[var(--border-default)] text-[var(--text-tertiary)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)]')
+                  }
+                >
+                  {t('ai.image_method_generations')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageMethod('responses')}
+                  className={
+                    'flex-1 rounded-[var(--r-md)] border px-2.5 py-2 text-[12px] font-medium transition-colors ' +
+                    (imageMethod === 'responses'
+                      ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--text-primary)]'
+                      : 'border-[var(--border-default)] text-[var(--text-tertiary)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)]')
+                  }
+                >
+                  {t('ai.image_method_responses')}
+                </button>
+              </div>
             </div>
           </SettingRow>
         </div>

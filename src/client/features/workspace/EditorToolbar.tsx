@@ -5,12 +5,13 @@ import { IconButton } from '../../components/primitives';
 import { Menu, Tooltip, type MenuItem } from '../../components/overlay';
 import { cn } from '../../lib/cn';
 import { insertAdvancedCodeBlock, insertBlockId, insertCallout, insertCodeBlock, insertDefinitionList, insertDetails, insertFootnote, insertFrontMatter, insertHorizontalRule, insertImage, insertLink, insertMermaid, insertPandocAttributes, insertTable, insertTabs, insertTag, insertText, setHeading, toggleBlockReference, toggleBold, toggleBulletList, toggleHighlight, toggleInlineCode, toggleInlineMath, toggleInserted, toggleItalic, toggleNoteEmbed, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleSubscript, toggleSuperscript, toggleTaskList, toggleWikiLink, } from '../../editor/commands';
-import { runAiIntoEditor, type AiMode, type AiTask } from '../../lib/ai-stream';
+import { runAiIntoEditor, runAiImageIntoEditor, type AiMode, type AiTask } from '../../lib/ai-stream';
 import { useUi } from '../../store/ui';
 import { t } from "../../lib/i18n";
 import { AiInlinePrompt } from './AiInlinePrompt';
 import { AiSelectionBubble } from './AiSelectionBubble';
 import { AiGeneratingBar } from './AiGeneratingBar';
+import { AiImageDialog } from './AiImageDialog';
 export function EditorToolbar({ view, onPickImage, mobile = false, }: {
     view: EditorView | null;
     onPickImage: () => void;
@@ -23,7 +24,8 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
     const aiRef = useRef<HTMLButtonElement>(null);
     const [openMenu, setOpenMenu] = useState<'heading' | 'inline' | 'note' | 'block' | 'ai' | null>(null);
     const [aiRunning, setAiRunning] = useState<{ task: AiTask; controller: AbortController } | null>(null);
-    const [inlinePrompt, setInlinePrompt] = useState<{ open: boolean; mode: 'draft' | 'edit' }>({ open: false, mode: 'draft' });
+    const [inlinePrompt, setInlinePrompt] = useState<{ open: boolean; mode: 'draft' | 'edit' | 'continue' }>({ open: false, mode: 'draft' });
+    const [imageOpen, setImageOpen] = useState(false);
     const toast = useUi((s) => s.toast);
     const aiDrafting = aiRunning !== null;
     const toggleMenu = (menu: 'heading' | 'inline' | 'note' | 'block' | 'ai') => {
@@ -72,7 +74,8 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
         const controller = new AbortController();
         setAiRunning({ task, controller });
         setOpenMenu(null);
-        runAiIntoEditor({ view, task, mode, toast, signal: controller.signal, prompt })
+        const runner = task === 'image' ? runAiImageIntoEditor : runAiIntoEditor;
+        runner({ view, task, mode, toast, signal: controller.signal, prompt })
             .catch(() => {})
             .finally(() => setAiRunning(null));
     };
@@ -97,10 +100,16 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
             onSelect: () => runAi('summarize', 'append'),
         },
         {
+            id: 'ai-continue',
+            label: t('ai.continue_writing'),
+            disabled: !hasContent,
+            separatorBefore: true,
+            onSelect: () => runAi('continue', 'append'),
+        },
+        {
             id: 'ai-edit',
             label: t('ai.ask_ai_to_edit'),
             disabled: !hasSelection,
-            separatorBefore: true,
             onSelect: () => {
                 setOpenMenu(null);
                 setInlinePrompt({ open: true, mode: 'edit' });
@@ -112,6 +121,15 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
             onSelect: () => {
                 setOpenMenu(null);
                 setInlinePrompt({ open: true, mode: 'draft' });
+            },
+        },
+        {
+            id: 'ai-image',
+            label: t('ai.task_image'),
+            separatorBefore: true,
+            onSelect: () => {
+                setOpenMenu(null);
+                setImageOpen(true);
             },
         },
     ];
@@ -189,8 +207,8 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
       <Divider />
 
       <Tooltip label={t('ai.assistant')}>
-        <button ref={aiRef} type="button" onClick={() => toggleMenu('ai')} disabled={aiDrafting} aria-label={t('ai.assistant')} aria-haspopup="menu" aria-expanded={openMenu === 'ai'} className={cn('inline-flex shrink-0 items-center gap-0.5 rounded-[var(--r-md)] px-1.5 text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] disabled:opacity-50', mobile ? 'h-9' : 'h-7', aiDrafting && 'text-[var(--accent)]')}>
-          <Sparkles size={14}/>
+        <button ref={aiRef} type="button" onClick={() => toggleMenu('ai')} disabled={aiDrafting} aria-label={t('ai.assistant')} aria-haspopup="menu" aria-expanded={openMenu === 'ai'} className={cn('inline-flex shrink-0 items-center gap-0.5 rounded-[var(--r-md)] px-2 text-[var(--text-secondary)] transition-all hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-[var(--text-secondary)]', mobile ? 'h-9' : 'h-7', aiDrafting && 'text-[var(--accent)]')}>
+          <Sparkles size={14} className={aiDrafting ? 'animate-pulse' : ''}/>
           <ChevronDown size={10} className="opacity-60"/>
         </button>
       </Tooltip>
@@ -201,7 +219,12 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
       <Menu anchor={blockRef} open={openMenu === 'block'} onClose={() => setOpenMenu(null)} items={blockItems} width={192} label={t("workspace.more_blocks")}/>
       <Menu anchor={aiRef} open={openMenu === 'ai'} onClose={() => setOpenMenu(null)} items={aiItems} width={220} label={t('ai.assistant')}/>
 
-      <AiSelectionBubble view={view} running={aiDrafting} onRun={runAi} />
+      <AiSelectionBubble
+        view={view}
+        running={aiDrafting}
+        onRun={runAi}
+        onImage={() => setImageOpen(true)}
+      />
       <AiInlinePrompt
         view={view}
         open={inlinePrompt.open}
@@ -209,9 +232,26 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
         onClose={() => setInlinePrompt((s) => ({ ...s, open: false }))}
         onSubmit={(prompt) => {
           const mode: AiMode = inlinePrompt.mode === 'edit' ? 'replace' : 'insert';
-          const task: AiTask = inlinePrompt.mode === 'edit' ? 'edit' : 'draft';
+          const task: AiTask = inlinePrompt.mode === 'edit' ? 'edit' : inlinePrompt.mode === 'continue' ? 'continue' : 'draft';
           setInlinePrompt((s) => ({ ...s, open: false }));
           runAi(task, mode, prompt);
+        }}
+        onImage={() => setImageOpen(true)}
+      />
+      <AiImageDialog
+        open={imageOpen}
+        onClose={() => setImageOpen(false)}
+        onInsert={(url, alt) => {
+          if (!view) return;
+          const md = `![${alt}](${url})\n`;
+          const pos = view.state.selection.main.to;
+          view.dispatch({
+            changes: { from: pos, insert: md },
+            selection: { anchor: pos + md.length },
+            scrollIntoView: true,
+            userEvent: 'input.ai',
+          });
+          view.focus();
         }}
       />
       {aiRunning && <AiGeneratingBar task={aiRunning.task} onCancel={cancelAi} />}

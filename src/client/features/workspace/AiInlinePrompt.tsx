@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { EditorView } from '@codemirror/view'
-import { Sparkles, X } from 'lucide-react'
+import { Sparkles, X, PenLine, Wand2, ImagePlus } from 'lucide-react'
+import { Tooltip } from '../../components/overlay'
 import { t } from '../../lib/i18n'
 
 export interface AiInlinePromptProps {
   view: EditorView | null
   open: boolean
-  /** 'draft' = no selection, write new content; 'edit' = has selection, edit it */
-  mode: 'draft' | 'edit'
+  /** 'draft' = no selection, write new content; 'edit' = has selection, edit it; 'continue' = continue writing */
+  mode: 'draft' | 'edit' | 'continue'
   onClose: () => void
   onSubmit: (prompt: string) => void
+  onImage?: () => void
 }
 
 interface PanelPos {
@@ -18,14 +20,7 @@ interface PanelPos {
   left: number
 }
 
-const QUICK_TOPICS = [
-  'Cloudflare Workers',
-  'Markdown 语法',
-  '笔记法',
-  '番茄工作法',
-]
-
-export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInlinePromptProps) {
+export function AiInlinePrompt({ view, open, mode, onClose, onSubmit, onImage }: AiInlinePromptProps) {
   const [value, setValue] = useState('')
   const [pos, setPos] = useState<PanelPos | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -56,7 +51,6 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
     return () => window.clearTimeout(id)
   }, [open, computePos])
 
-  // Reposition on scroll
   useEffect(() => {
     if (!open || !view) return
     const onScroll = () => computePos()
@@ -69,7 +63,6 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
     }
   }, [open, view, computePos])
 
-  // Escape to close
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
@@ -82,7 +75,6 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
     return () => window.removeEventListener('keydown', onKey, true)
   }, [open, onClose])
 
-  // Click outside to close
   useEffect(() => {
     if (!open) return
     const onMouseDown = (e: MouseEvent) => {
@@ -96,8 +88,13 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
   if (!open || !view || !pos) return null
 
   const trimmed = value.trim()
-  const canSubmit = trimmed.length > 0
-  const hintText = mode === 'edit' ? t('ai.suggest_edit_hint') : t('ai.suggest_draft_hint')
+  const canSubmit = trimmed.length > 0 || mode === 'continue'
+  const hintText =
+    mode === 'edit'
+      ? t('ai.suggest_edit_hint')
+      : mode === 'continue'
+        ? t('ai.continue_hint')
+        : t('ai.suggest_draft_hint')
 
   const handleSubmit = () => {
     if (!canSubmit) return
@@ -115,6 +112,15 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
   const editorWidth = view.dom.clientWidth
   const maxLeft = Math.max(8, editorWidth - panelWidth - 8)
 
+  const headerIcon =
+    mode === 'edit' ? <Wand2 size={13} /> : mode === 'continue' ? <PenLine size={13} /> : <Sparkles size={13} />
+  const headerTitle =
+    mode === 'edit'
+      ? t('ai.ask_ai_to_edit')
+      : mode === 'continue'
+        ? t('ai.continue_writing')
+        : t('ai.draft_title')
+
   return createPortal(
     <div
       ref={panelRef}
@@ -128,11 +134,11 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
       }}
     >
       <div className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--border-default)] bg-[var(--bg-overlay)] shadow-[var(--shadow-pop)] backdrop-blur">
-        {/* Header */}
+        {/* Header with brand gradient accent */}
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-3 py-2">
           <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-[var(--text-primary)]">
-            <Sparkles size={13} className="text-[var(--accent)]" />
-            {mode === 'edit' ? t('ai.ask_ai_to_edit') : t('ai.draft_title')}
+            <span className="ai-brand-text">{headerIcon}</span>
+            <span className="ai-brand-text">{headerTitle}</span>
           </span>
           <button
             type="button"
@@ -145,56 +151,52 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
         </div>
         {/* Input */}
         <div className="p-2">
-          <textarea
-            ref={inputRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder={t('ai.suggest_placeholder')}
-            rows={3}
-            className="w-full resize-none rounded-[var(--r-sm)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-2.5 py-2 text-[12.5px] leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-ring)] focus:outline-none"
-          />
-          {/* Quick topic chips (draft mode only) */}
-          {mode === 'draft' && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {QUICK_TOPICS.map((topic) => (
-                <button
-                  key={topic}
-                  type="button"
-                  onClick={() => setValue(topic)}
-                  className="rounded-full border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-2 py-0.5 text-[11px] text-[var(--text-tertiary)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)]"
-                >
-                  {topic}
-                </button>
-              ))}
-            </div>
+          {mode !== 'continue' ? (
+            <textarea
+              ref={inputRef}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder={t('ai.suggest_placeholder')}
+              rows={3}
+              className="w-full resize-none rounded-[var(--r-sm)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-2.5 py-2 text-[12.5px] leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_var(--accent-ring)] focus:outline-none"
+            />
+          ) : (
+            <p className="rounded-[var(--r-sm)] border border-[var(--border-subtle)] bg-[var(--bg-inset)] px-2.5 py-2 text-[12px] leading-relaxed text-[var(--text-tertiary)]">
+              {t('ai.continue_hint')}
+            </p>
           )}
           <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--text-quaternary)]">{hintText}</p>
         </div>
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-[var(--border-subtle)] px-3 py-2">
-          <span className="text-[10.5px] text-[var(--text-quaternary)]">
-            <span className="hidden md:inline">⌘↵ </span>
-            {t('ai.shortcut_submit')}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-[var(--r-sm)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--text-secondary)] transition-colors hover:bg-[var(--bg-hover)]"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              className="inline-flex items-center gap-1 rounded-[var(--r-sm)] bg-[var(--accent)] px-2.5 py-1 text-[11.5px] font-medium text-[var(--accent-contrast)] transition-colors hover:bg-[var(--accent-hover)] disabled:opacity-40"
-            >
-              <Sparkles size={11} />
-              {t('ai.generate')}
-            </button>
+          <div className="flex items-center gap-1">
+            {onImage && (
+              <Tooltip label={t('ai.task_image')}>
+                <button
+                  type="button"
+                  onClick={onImage}
+                  aria-label={t('ai.task_image')}
+                  className="inline-flex size-7 items-center justify-center rounded-[var(--r-sm)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--accent)]"
+                >
+                  <ImagePlus size={14} />
+                </button>
+              </Tooltip>
+            )}
+            <span className="ml-1 text-[10.5px] text-[var(--text-quaternary)]">
+              <span className="hidden md:inline">⌘↵ </span>
+              {t('ai.shortcut_submit')}
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="ai-brand-gradient inline-flex items-center gap-1 rounded-[var(--r-sm)] px-3 py-1.5 text-[11.5px] font-medium text-white transition-transform hover:scale-[1.03] active:scale-95 disabled:opacity-40"
+          >
+            <Sparkles size={11} />
+            {t('ai.generate')}
+          </button>
         </div>
       </div>
     </div>,

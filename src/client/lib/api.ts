@@ -24,8 +24,11 @@ import type {
   TestConnectionResult,
   UserSettings,
   AiContentRequest,
+  AiContinueRequest,
   AiDraftRequest,
   AiEditRequest,
+  AiImageRequest,
+  AiImageResponse,
   AiConfig,
   AiConfigPatch,
 } from '@shared/types'
@@ -365,11 +368,13 @@ export const api = {
 
   ai: {
     stream: (
-      task: 'summarize' | 'polish' | 'draft' | 'edit',
-      body: AiContentRequest | AiDraftRequest | AiEditRequest,
+      task: 'summarize' | 'polish' | 'draft' | 'edit' | 'continue',
+      body: AiContentRequest | AiDraftRequest | AiEditRequest | AiContinueRequest,
       onDelta: (chunk: string) => void,
       signal?: AbortSignal,
     ): Promise<void> => streamAi(`/api/ai/${task}`, body, onDelta, signal),
+    image: (body: AiImageRequest, signal?: AbortSignal) =>
+      request<AiImageResponse>('/api/ai/image', { method: 'POST', body, signal }),
     getConfig: () => request<AiConfig>('/api/ai/config'),
     saveConfig: (body: AiConfigPatch) =>
       request<AiConfig>('/api/ai/config', { method: 'PUT', body }),
@@ -384,7 +389,7 @@ function toQuery(params: Record<string, string | number | undefined>): string {
 
 async function streamAi(
   path: string,
-  body: AiContentRequest | AiDraftRequest | AiEditRequest,
+  body: AiContentRequest | AiDraftRequest | AiEditRequest | AiContinueRequest,
   onDelta: (chunk: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {

@@ -5,7 +5,7 @@ import { ApiError } from '../lib/errors'
 import { encryptAiKey } from '../lib/crypto'
 import { readJson } from '../lib/request'
 import { requireAuth } from '../middleware/auth'
-import { sseFromChunks, streamChatCompletion, resolveAiConfig, type ChatMessage } from '../lib/openai'
+import { sseFromChunks, streamChatCompletion, resolveAiConfig, generateImage, generateImageViaResponses, type ChatMessage } from '../lib/openai'
 import {
   clearAiKeyCipher,
   getAiConfig,
@@ -32,15 +32,26 @@ interface AiDraftBody extends AiBaseBody {
   topic: string
 }
 
+interface AiContinueBody extends AiBaseBody {
+  content: string
+}
+
 interface AiEditBody extends AiBaseBody {
   instruction: string
   content: string
   selection?: string
 }
 
+interface AiImageBody extends AiBaseBody {
+  prompt: string
+  size?: '1024x1024' | '1792x1024' | '1024x1792'
+}
+
 interface AiConfigPatchBody {
   baseUrl?: string
   model?: string
+  imageModel?: string
+  imageMethod?: 'generations' | 'responses'
   apiKey?: string | null
 }
 
@@ -48,7 +59,7 @@ function languageName(locale: string | undefined): string {
   return locale === 'en-US' ? 'English' : 'Simplified Chinese'
 }
 
-function buildSystem(task: 'summarize' | 'polish' | 'draft' | 'edit', locale: string | undefined): string {
+function buildSystem(task: 'summarize' | 'polish' | 'draft' | 'edit' | 'continue', locale: string | undefined): string {
   const lang = languageName(locale)
   if (task === 'summarize') {
     return `You are a meticulous editorial assistant. Summarize the user-supplied Markdown content as a concise bullet list of key points. Extract the core ideas and key information without inventing content. Output only the summary, in ${lang}.`
@@ -58,6 +69,9 @@ function buildSystem(task: 'summarize' | 'polish' | 'draft' | 'edit', locale: st
   }
   if (task === 'edit') {
     return `You are a Markdown editing assistant. Apply the user's instructions to edit the supplied Markdown text. Preserve the meaning unless asked otherwise. Output only the edited Markdown, in ${lang}.`
+  }
+  if (task === 'continue') {
+    return `You are a Markdown writing assistant. Continue writing the user-supplied Markdown document naturally, picking up from where it ends. Preserve the existing tone, style and structure. Do not repeat existing content. Output only the continuation, in ${lang}.`
   }
   return `You are a Markdown writing assistant. Based on the user's topic or instructions, write a well-structured Markdown document using appropriate headings and lists. Output only the document, in ${lang}.`
 }
@@ -111,6 +125,19 @@ aiRoutes.put('/config', async (c) => {
     const model = body.model.trim()
     if (model.length > 128) throw ApiError.badRequest('Model name is too long')
     await setAiConfig(c.env.DB, { model })
+  }
+
+  if (body.imageModel !== undefined) {
+    const imageModel = body.imageModel.trim()
+    if (imageModel.length > 128) throw ApiError.badRequest('Image model name is too long')
+    await setAiConfig(c.env.DB, { imageModel })
+  }
+
+  if (body.imageMethod !== undefined) {
+    if (body.imageMethod !== 'generations' && body.imageMethod !== 'responses') {
+      throw ApiError.badRequest('Invalid image method')
+    }
+    await setAiConfig(c.env.DB, { imageMethod: body.imageMethod })
   }
 
   if (body.apiKey !== undefined) {
@@ -173,6 +200,21 @@ aiRoutes.post('/draft', async (c) => {
   return sseFromChunks(stream)
 })
 
+aiRoutes.post('/continue', async (c) => {
+  const body = await readJson<AiContinueBody>(c, AI_BODY_LIMIT)
+  const content = validateContent(body.content)
+  const config = await resolveAiConfig(c.env)
+  const messages: ChatMessage[] = [
+    { role: 'system', content: buildSystem('continue', body.locale) },
+    { role: 'user', content },
+  ]
+  const stream = streamChatCompletion(config, messages, {
+    signal: c.req.raw.signal,
+    temperature: 0.7,
+  })
+  return sseFromChunks(stream)
+})
+
 aiRoutes.post('/edit', async (c) => {
   const body = await readJson<AiEditBody>(c, AI_BODY_LIMIT)
   const instruction = validateTopic(body.instruction)
@@ -187,4 +229,18 @@ aiRoutes.post('/edit', async (c) => {
     temperature: 0.5,
   })
   return sseFromChunks(stream)
+})
+
+aiRoutes.post('/image', async (c) => {
+  const body = await readJson<AiImageBody>(c, AI_BODY_LIMIT)
+  const prompt = validateTopic(body.prompt)
+  if (body.size && !['1024x1024', '1792x1024', '1024x1792'].includes(body.size)) {
+    throw ApiError.badRequest('Invalid image size')
+  }
+  const config = await resolveAiConfig(c.env)
+  const genOptions = { size: body.size, signal: c.req.raw.signal }
+  const result = config.imageMethod === 'responses'
+    ? await generateImageViaResponses(config, prompt, genOptions)
+    : await generateImage(config, prompt, genOptions)
+  return c.json(result)
 })

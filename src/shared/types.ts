@@ -439,7 +439,7 @@ export interface ApiErrorBody {
   }
 }
 
-export type AiTask = 'summarize' | 'polish' | 'draft' | 'edit'
+export type AiTask = 'summarize' | 'polish' | 'draft' | 'edit' | 'continue' | 'image'
 
 export interface AiContentRequest {
   content: string
@@ -452,6 +452,11 @@ export interface AiDraftRequest {
   locale?: AppLocale
 }
 
+export interface AiContinueRequest {
+  content: string
+  locale?: AppLocale
+}
+
 export interface AiEditRequest {
   instruction: string
   content: string
@@ -459,15 +464,32 @@ export interface AiEditRequest {
   locale?: AppLocale
 }
 
+export interface AiImageRequest {
+  prompt: string
+  size?: '1024x1024' | '1792x1024' | '1024x1792'
+  locale?: AppLocale
+}
+
+export interface AiImageResponse {
+  url: string
+  revisedPrompt?: string
+}
+
+export type AiImageMethod = 'generations' | 'responses'
+
 export interface AiConfig {
   baseUrl: string
   model: string
+  imageModel: string
+  imageMethod: AiImageMethod
   hasKey: boolean
 }
 
 export interface AiConfigPatch {
   baseUrl?: string
   model?: string
+  imageModel?: string
+  imageMethod?: AiImageMethod
   apiKey?: string | null
 }
 
@@ -490,3 +512,4 @@ export type ApiErrorCode =
   | 'too_many_attempts'
   | 'registration_closed'
   | 'server_misconfigured'
+  | 'invalid_response'
