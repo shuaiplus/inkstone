@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import type { EditorView } from '@codemirror/view'
 import { Sparkles, Wand2, Scissors, Maximize2, Minimize2, SpellCheck, X } from 'lucide-react'
 import { t } from '../../lib/i18n'
-import { cn } from '../../lib/cn'
 import type { AiTask, AiMode } from '../../lib/ai-stream'
 
 export interface AiSelectionBubbleProps {
@@ -49,6 +48,7 @@ export function AiSelectionBubble({ view, running, onRun }: AiSelectionBubblePro
       return
     }
     const coords = view.coordsAtPos(main.from)
+    if (!coords) return
     const rect = view.dom.getBoundingClientRect()
     setHasSelection(true)
     setPos({ top: coords.top - rect.top - 8, left: coords.left - rect.left })

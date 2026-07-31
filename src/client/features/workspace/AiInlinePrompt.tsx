@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom'
 import type { EditorView } from '@codemirror/view'
 import { Sparkles, X } from 'lucide-react'
 import { t } from '../../lib/i18n'
-import type { AiTask, AiMode } from '../../lib/ai-stream'
 
 export interface AiInlinePromptProps {
   view: EditorView | null
@@ -36,6 +35,7 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit }: AiInline
     if (!view || !open) return
     const { main } = view.state.selection
     const coords = view.coordsAtPos(main.from)
+    if (!coords) return
     const rect = view.dom.getBoundingClientRect()
     setPos({ top: coords.bottom - rect.top + 6, left: coords.left - rect.left })
   }, [view, open])

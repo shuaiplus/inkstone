@@ -2,9 +2,10 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { Spinner } from '../../components/primitives'
 import { t } from '../../lib/i18n'
+import type { AiTask } from '../../lib/ai-stream'
 
 export interface AiGeneratingBarProps {
-  task: 'summarize' | 'polish' | 'draft'
+  task: AiTask
   onCancel: () => void
 }
 
