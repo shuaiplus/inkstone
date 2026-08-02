@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { KeyRound, Loader2, Save, Sparkles } from 'lucide-react'
+import { CheckCircle2, KeyRound, Loader2, Radio, Save, Sparkles, XCircle } from 'lucide-react'
 import { api, ApiError } from '../../lib/api'
 import { Button } from '../../components/primitives'
 import { Input, SettingRow } from '../../components/form'
 import { useUi } from '../../store/ui'
 import { useSession } from '../../store/session'
 import { t } from '../../lib/i18n'
-import type { AiConfig } from '@shared/types'
+import type { AiConfig, TestConnectionResult } from '@shared/types'
 
 export function AiSettings() {
   const toast = useUi((s) => s.toast)
@@ -14,6 +14,8 @@ export function AiSettings() {
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<TestConnectionResult | null>(null)
   const [baseUrl, setBaseUrl] = useState('')
   const [model, setModel] = useState('')
   const [imageModel, setImageModel] = useState('')
@@ -21,13 +23,21 @@ export function AiSettings() {
   const [apiKey, setApiKey] = useState('')
   const [keyDirty, setKeyDirty] = useState(false)
   const mountedRef = useRef(true)
+  const testControllerRef = useRef<AbortController | null>(null)
 
   const isOwner = user?.role === 'owner'
+  const canTest = Boolean(apiKey.trim() || (config?.hasKey && !keyDirty))
+  const hasChanges = keyDirty
+    || baseUrl.trim() !== (config?.baseUrl ?? '')
+    || model.trim() !== (config?.model ?? '')
+    || imageModel.trim() !== (config?.imageModel ?? '')
+    || imageMethod !== (config?.imageMethod ?? 'generations')
 
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      testControllerRef.current?.abort()
     }
   }, [])
 
@@ -80,6 +90,7 @@ export function AiSettings() {
       setImageMethod(updated.imageMethod)
       setApiKey('')
       setKeyDirty(false)
+      setTestResult(null)
       toast({ title: t('ai.config_saved'), tone: 'success' })
     } catch (err) {
       toast({
@@ -89,6 +100,34 @@ export function AiSettings() {
       })
     } finally {
       if (mountedRef.current) setSaving(false)
+    }
+  }
+
+  const testConnection = async () => {
+    if (testing || !canTest) return
+    const controller = new AbortController()
+    testControllerRef.current = controller
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await api.ai.testConfig({
+        baseUrl: baseUrl.trim(),
+        model: model.trim(),
+        apiKey: apiKey.trim() || undefined,
+      }, controller.signal)
+      if (mountedRef.current && !controller.signal.aborted) setTestResult(result)
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return
+      if (mountedRef.current) {
+        setTestResult({
+          ok: false,
+          message: t('ai.connection_failed'),
+          detail: err instanceof ApiError ? err.message : String(err),
+        })
+      }
+    } finally {
+      if (testControllerRef.current === controller) testControllerRef.current = null
+      if (mountedRef.current) setTesting(false)
     }
   }
 
@@ -121,10 +160,45 @@ export function AiSettings() {
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium text-[var(--text-primary)]">{t('ai.status')}</div>
             <div className="mt-0.5 text-[11.5px] leading-relaxed text-[var(--text-tertiary)]">
-              {hasKey ? t('ai.status_ready') : t('ai.status_not_configured')}
+              {testResult?.ok
+                ? t('ai.status_verified', { latency: testResult.latencyMs ?? 0 })
+                : hasKey
+                  ? t('ai.status_ready')
+                  : t('ai.status_not_configured')}
             </div>
           </div>
         </div>
+
+        {testResult && (
+          <div
+            role="status"
+            className={
+              'mt-3 flex items-start gap-2 rounded-[var(--r-md)] border px-3 py-2.5 ' +
+              (testResult.ok
+                ? 'border-[color-mix(in_oklab,var(--success)_28%,transparent)] bg-[color-mix(in_oklab,var(--success)_8%,transparent)]'
+                : 'border-[color-mix(in_oklab,var(--danger)_28%,transparent)] bg-[color-mix(in_oklab,var(--danger)_8%,transparent)]')
+            }
+          >
+            {testResult.ok
+              ? <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-[var(--success)]" />
+              : <XCircle size={14} className="mt-0.5 shrink-0 text-[var(--danger)]" />}
+            <div className="min-w-0">
+              <div className="text-[11.5px] font-medium text-[var(--text-primary)]">
+                {testResult.ok ? t('ai.connection_succeeded') : testResult.message}
+              </div>
+              {testResult.detail && (
+                <div className="mt-0.5 break-words text-[10.5px] leading-relaxed text-[var(--text-tertiary)]">
+                  {testResult.ok
+                    ? t('ai.connection_detail', {
+                        model: testResult.detail,
+                        latency: testResult.latencyMs ?? 0,
+                      })
+                    : testResult.detail}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="mt-3">
           <SettingRow
@@ -138,6 +212,7 @@ export function AiSettings() {
                 onChange={(e) => {
                   setApiKey(e.target.value)
                   setKeyDirty(true)
+                  setTestResult(null)
                 }}
                 placeholder={hasKey ? '••••••••••••' : t('ai.api_key_placeholder')}
                 leading={<KeyRound size={13} />}
@@ -150,7 +225,10 @@ export function AiSettings() {
             <div className="w-full md:w-[280px]">
               <Input
                 value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
+                onChange={(e) => {
+                  setBaseUrl(e.target.value)
+                  setTestResult(null)
+                }}
                 placeholder="https://api.openai.com/v1"
               />
             </div>
@@ -160,7 +238,10 @@ export function AiSettings() {
             <div className="w-full md:w-[280px]">
               <Input
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
+                onChange={(e) => {
+                  setModel(e.target.value)
+                  setTestResult(null)
+                }}
                 placeholder="gpt-4o-mini"
               />
             </div>
@@ -209,12 +290,23 @@ export function AiSettings() {
           </SettingRow>
         </div>
 
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex flex-wrap justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={testConnection}
+            loading={testing}
+            disabled={saving || !canTest}
+            icon={<Radio size={13} />}
+          >
+            {testing ? t('ai.testing_connection') : t('ai.test_connection')}
+          </Button>
           <Button
             variant="primary"
             size="sm"
             onClick={save}
             loading={saving}
+            disabled={testing || !hasChanges}
             icon={<Save size={13} />}
           >
             {t('common.save')}

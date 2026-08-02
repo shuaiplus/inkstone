@@ -47,3 +47,36 @@ describe('API response decoding', () => {
     } satisfies Partial<ApiError>)
   })
 })
+
+describe('AI stream decoding', () => {
+  it('decodes fragmented SSE chunks including a final event without a newline', async () => {
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: "smooth'))
+        controller.enqueue(encoder.encode('"\n\ndata: " output"'))
+        controller.close()
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(body, {
+      headers: { 'Content-Type': 'text/event-stream' },
+    }))))
+    const chunks: string[] = []
+
+    await api.ai.stream('draft', { topic: 'test' }, (chunk) => chunks.push(chunk))
+
+    expect(chunks).toEqual(['smooth', ' output'])
+  })
+
+  it('surfaces an SSE error event even when it is the final event', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(
+      'event: error\ndata: "proxy unavailable"',
+      { headers: { 'Content-Type': 'text/event-stream' } },
+    ))))
+
+    await expect(api.ai.stream('draft', { topic: 'test' }, vi.fn())).rejects.toMatchObject({
+      code: 'server_misconfigured',
+      message: 'proxy unavailable',
+    } satisfies Partial<ApiError>)
+  })
+})

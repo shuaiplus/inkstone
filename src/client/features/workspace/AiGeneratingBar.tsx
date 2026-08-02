@@ -1,14 +1,15 @@
 import { createPortal } from 'react-dom'
 import { X, Sparkles } from 'lucide-react'
 import { t } from '../../lib/i18n'
-import type { AiTask } from '../../lib/ai-stream'
+import type { AiRunProgress, AiTask } from '../../lib/ai-stream'
 
 export interface AiGeneratingBarProps {
   task: AiTask
+  progress: AiRunProgress
   onCancel: () => void
 }
 
-export function AiGeneratingBar({ task, onCancel }: AiGeneratingBarProps) {
+export function AiGeneratingBar({ task, progress, onCancel }: AiGeneratingBarProps) {
   const taskLabel =
     task === 'polish'
       ? t('ai.task_polish')
@@ -36,8 +37,10 @@ export function AiGeneratingBar({ task, onCancel }: AiGeneratingBarProps) {
         <span className="text-[12.5px] font-medium text-[var(--text-primary)]">
           {t('ai.generating_with_task', { task: taskLabel })}
         </span>
-        <span className="hidden text-[11px] text-[var(--text-tertiary)] md:block">
-          {t('ai.generating_hint')}
+        <span className="hidden text-[11px] text-[var(--text-tertiary)] md:block" aria-atomic="true">
+          {progress.phase === 'connecting'
+            ? t('ai.connecting_hint')
+            : t('ai.streaming_progress', { count: progress.characters })}
         </span>
       </span>
       <button

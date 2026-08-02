@@ -31,6 +31,7 @@ import type {
   AiImageResponse,
   AiConfig,
   AiConfigPatch,
+  AiConfigTestRequest,
 } from '@shared/types'
 import { publishBroadcast } from './db'
 import { getLocale, t, translateApiError } from './i18n'
@@ -378,6 +379,8 @@ export const api = {
     getConfig: () => request<AiConfig>('/api/ai/config'),
     saveConfig: (body: AiConfigPatch) =>
       request<AiConfig>('/api/ai/config', { method: 'PUT', body }),
+    testConfig: (body: AiConfigTestRequest, signal?: AbortSignal) =>
+      request<TestConnectionResult>('/api/ai/test', { method: 'POST', body, signal }),
   },
 }
 
@@ -420,6 +423,37 @@ async function streamAi(
   const decoder = new TextDecoder()
   let buffer = ''
   let eventName = ''
+  const processLine = (raw: string): boolean => {
+    const line = raw.replace(/\r$/, '')
+    if (line === '') {
+      eventName = ''
+      return false
+    }
+    if (line.startsWith('event:')) {
+      eventName = line.slice(6).trim()
+      return false
+    }
+    if (!line.startsWith('data:')) return false
+    const data = line.slice(5).trim()
+    if (data === '[DONE]') return true
+    try {
+      const parsed = JSON.parse(data) as unknown
+      if (eventName === 'error') {
+        const message = typeof parsed === 'string'
+          ? parsed
+          : (parsed as { message?: unknown } | null)?.message
+        throw new ApiError(
+          502,
+          'server_misconfigured',
+          typeof message === 'string' ? message : t('ai.request_failed'),
+        )
+      }
+      if (typeof parsed === 'string') onDelta(parsed)
+    } catch (err) {
+      if (err instanceof ApiError) throw err
+    }
+    return false
+  }
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -428,29 +462,11 @@ async function streamAi(
       const parts = buffer.split('\n')
       buffer = parts.pop() ?? ''
       for (const raw of parts) {
-        const line = raw.replace(/\r$/, '')
-        if (line === '') {
-          eventName = ''
-          continue
-        }
-        if (line.startsWith('event:')) {
-          eventName = line.slice(6).trim()
-          continue
-        }
-        if (!line.startsWith('data:')) continue
-        const data = line.slice(5).trim()
-        if (data === '[DONE]') return
-        try {
-          const parsed = JSON.parse(data) as string
-          if (eventName === 'error') {
-            throw new ApiError(502, 'server_misconfigured', typeof parsed === 'string' ? parsed : 'AI request failed')
-          }
-          if (typeof parsed === 'string') onDelta(parsed)
-        } catch (err) {
-          if (err instanceof ApiError) throw err
-        }
+        if (processLine(raw)) return
       }
     }
+    buffer += decoder.decode()
+    if (buffer && processLine(buffer)) return
   } finally {
     reader.releaseLock()
   }

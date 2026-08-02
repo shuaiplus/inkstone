@@ -13,6 +13,7 @@ import { editorTheme } from './theme';
 import { focusModePlugin, markdownDecorations, typewriterPlugin } from './decorations';
 import { codeFenceSource, tagSource, wikiLinkSource, type CompletionSources } from './completion';
 import { pasteExtension, type PasteHandlers } from './paste';
+import { aiGenerationExtension } from './ai-generation';
 import { setHeading, smartEnter, tableTab, toggleBold, toggleBulletList, toggleHighlight, toggleInlineCode, toggleItalic, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleTaskDone, toggleTaskList, } from './commands';
 import { t } from "../lib/i18n";
 
@@ -79,6 +80,7 @@ export function CodeEditor({ value, onChange, settings, sources, handlers, onRea
             focusModePlugin,
             typewriterPlugin,
             pasteExtension(cbRef.current.handlers),
+            aiGenerationExtension,
             keymap.of([
                 { key: 'Enter', run: smartEnter },
                 { key: 'Tab', run: (view) => acceptCompletion(view) || tableTab(view) },

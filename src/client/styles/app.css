@@ -372,6 +372,10 @@
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+@keyframes ink-ai-spark {
+  0%, 100% { opacity: 0.55; transform: scale(0.82) rotate(-8deg); }
+  50% { opacity: 1; transform: scale(1.08) rotate(6deg); }
+}
 
 .ai-cursor {
   display: inline-block;
@@ -410,6 +414,58 @@
   );
   background-size: 200% 100%;
   animation: ink-ai-shimmer 1.6s ease-in-out infinite;
+}
+
+.cm-ai-generated {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--accent) 7%, transparent),
+      color-mix(in oklab, var(--accent) 14%, transparent),
+      color-mix(in oklab, var(--accent) 7%, transparent)
+    );
+  background-size: 220% 100%;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  animation: ink-ai-shimmer 2.2s linear infinite;
+}
+
+.cm-ai-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 5px;
+  padding: 1px 6px 1px 4px;
+  border: 1px solid color-mix(in oklab, var(--accent) 20%, var(--border-subtle));
+  border-radius: var(--r-full);
+  background: color-mix(in oklab, var(--accent) 8%, var(--bg-overlay));
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 17px;
+  vertical-align: 1px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--accent) 10%, transparent);
+  user-select: none;
+  pointer-events: none;
+}
+
+.cm-ai-status-spark {
+  display: inline-block;
+  font-size: 11px;
+  animation: ink-ai-spark 1.15s var(--ease-in-out) infinite;
+}
+
+.cm-ai-status-streaming::after {
+  width: 1.5px;
+  height: 11px;
+  margin-left: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  content: '';
+  animation: ink-ai-pulse 0.9s ease-in-out infinite;
 }
 
 .skeleton {

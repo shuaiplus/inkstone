@@ -153,16 +153,17 @@ export function AiSelectionBubble({ view, running, onRun, onImage }: AiSelection
     { id: 'shorter', label: t('ai.make_shorter'), icon: <Minimize2 size={14} />, task: 'edit', mode: 'replace', prompt: t('ai.make_shorter') },
     { id: 'longer', label: t('ai.make_longer'), icon: <Maximize2 size={14} />, task: 'edit', mode: 'replace', prompt: t('ai.make_longer') },
     { id: 'grammar', label: t('ai.fix_grammar'), icon: <SpellCheck size={14} />, task: 'edit', mode: 'replace', prompt: t('ai.fix_grammar') },
-    { id: 'summarize', label: t('ai.summarize'), icon: <Scissors size={14} />, task: 'summarize', mode: 'insert' },
+    { id: 'summarize', label: t('ai.summarize'), icon: <Scissors size={14} />, task: 'summarize', mode: 'insert-below' },
   ]
 
   if (!hasSelection || !pos || running) return null
 
   const flipDown = pos.top < 60
   const editorWidth = view?.dom.clientWidth ?? 800
+  const panelWidth = Math.min(320, Math.max(200, editorWidth - 16))
   const finalStyle: React.CSSProperties = {
     position: 'absolute',
-    left: Math.max(8, Math.min(pos.left, editorWidth - 340)),
+    left: Math.max(8, Math.min(pos.left, editorWidth - panelWidth - 8)),
     top: pos.top,
     transform: flipDown ? 'translateY(8px)' : 'translateY(-100%)',
     zIndex: 230,
@@ -180,7 +181,7 @@ export function AiSelectionBubble({ view, running, onRun, onImage }: AiSelection
           {t('ai.ask_ai')}
         </button>
       ) : (
-        <div className="w-[320px] overflow-hidden rounded-[var(--r-lg)] border border-[var(--border-default)] bg-[var(--bg-overlay)] shadow-[var(--shadow-pop)] backdrop-blur">
+        <div style={{ width: panelWidth }} className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--border-default)] bg-[var(--bg-overlay)] shadow-[var(--shadow-pop)] backdrop-blur">
           {/* Quick actions grid */}
           <div className="p-1.5">
             <div className="grid grid-cols-3 gap-0.5">

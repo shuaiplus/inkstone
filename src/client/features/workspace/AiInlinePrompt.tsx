@@ -108,8 +108,8 @@ export function AiInlinePrompt({ view, open, mode, onClose, onSubmit, onImage }:
     }
   }
 
-  const panelWidth = 360
   const editorWidth = view.dom.clientWidth
+  const panelWidth = Math.min(360, Math.max(200, editorWidth - 16))
   const maxLeft = Math.max(8, editorWidth - panelWidth - 8)
 
   const headerIcon =

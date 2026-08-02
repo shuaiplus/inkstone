@@ -55,6 +55,12 @@ interface AiConfigPatchBody {
   apiKey?: string | null
 }
 
+interface AiConfigTestBody {
+  baseUrl?: string
+  model?: string
+  apiKey?: string
+}
+
 function languageName(locale: string | undefined): string {
   return locale === 'en-US' ? 'English' : 'Simplified Chinese'
 }
@@ -153,6 +159,38 @@ aiRoutes.put('/config', async (c) => {
 
   const config = await getAiConfig(c.env.DB)
   return c.json(config)
+})
+
+aiRoutes.post('/test', async (c) => {
+  requireOwner(c)
+  const body = await readJson<AiConfigTestBody>(c, 8 * 1024)
+  const baseUrl = body.baseUrl?.trim()
+  const model = body.model?.trim()
+  const apiKey = body.apiKey?.trim()
+  if (baseUrl && (baseUrl.length > 1024 || !/^https?:\/\//i.test(baseUrl))) {
+    throw ApiError.badRequest('Base URL must be a valid HTTP or HTTPS URL')
+  }
+  if (model && model.length > 128) throw ApiError.badRequest('Model name is too long')
+  if (apiKey && apiKey.length > 512) throw ApiError.badRequest('API key is too long')
+
+  const config = await resolveAiConfig(c.env, { baseUrl, model, apiKey })
+  const startedAt = Date.now()
+  let output = ''
+  for await (const chunk of streamChatCompletion(config, [
+    { role: 'system', content: 'You are handling a connection check. Follow the user instruction exactly.' },
+    { role: 'user', content: 'Reply with OK only.' },
+  ], { signal: c.req.raw.signal })) {
+    output += chunk
+  }
+  if (!output.trim()) {
+    throw new ApiError(502, 'invalid_response', 'The AI endpoint connected but returned no text')
+  }
+  return c.json({
+    ok: true,
+    message: 'AI connection succeeded',
+    detail: config.model,
+    latencyMs: Date.now() - startedAt,
+  })
 })
 
 aiRoutes.post('/summarize', async (c) => {

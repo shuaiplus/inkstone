@@ -26,21 +26,82 @@ export interface ResolvedAiConfig {
   imageMethod: 'generations' | 'responses'
 }
 
-export async function resolveAiConfig(env: Env): Promise<ResolvedAiConfig> {
+export interface AiConfigOverrides {
+  apiKey?: string
+  baseUrl?: string
+  model?: string
+}
+
+export async function resolveAiConfig(
+  env: Env,
+  overrides: AiConfigOverrides = {},
+): Promise<ResolvedAiConfig> {
   const db = env.DB
   const config = await getAiConfig(db)
-  const keyCipher = await getAiKeyCipher(db)
-  if (!keyCipher) {
-    throw new ApiError(503, 'server_misconfigured', 'AI is not configured. Set the OpenAI API key in Settings.')
-  }
-  const apiKey = await decryptAiKey(env, keyCipher)
+  let apiKey = overrides.apiKey?.trim() ?? ''
   if (!apiKey) {
-    throw new ApiError(503, 'server_misconfigured', 'The stored AI key could not be decrypted. Re-enter it in Settings.')
+    const keyCipher = await getAiKeyCipher(db)
+    if (!keyCipher) {
+      throw new ApiError(503, 'server_misconfigured', 'AI is not configured. Set the OpenAI API key in Settings.')
+    }
+    const decrypted = await decryptAiKey(env, keyCipher)
+    if (!decrypted) {
+      throw new ApiError(503, 'server_misconfigured', 'The stored AI key could not be decrypted. Re-enter it in Settings.')
+    }
+    apiKey = decrypted
   }
-  const baseUrl = (config.baseUrl.trim() || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, '')
-  const model = config.model.trim() || DEFAULT_OPENAI_MODEL
+  const baseUrl = ((overrides.baseUrl ?? config.baseUrl).trim() || DEFAULT_OPENAI_BASE_URL).replace(/\/+$/, '')
+  const model = (overrides.model ?? config.model).trim() || DEFAULT_OPENAI_MODEL
   const imageModel = config.imageModel.trim() || DEFAULT_IMAGE_MODEL
   return { apiKey, baseUrl, model, imageModel, imageMethod: config.imageMethod }
+}
+
+function contentText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content.map((part) => {
+    if (typeof part === 'string') return part
+    if (!part || typeof part !== 'object') return ''
+    const value = part as { text?: unknown; content?: unknown }
+    if (typeof value.text === 'string') return value.text
+    if (value.text && typeof value.text === 'object') {
+      const nested = value.text as { value?: unknown }
+      if (typeof nested.value === 'string') return nested.value
+    }
+    return typeof value.content === 'string' ? value.content : ''
+  }).join('')
+}
+
+function chatPayloadText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return ''
+  const data = payload as {
+    error?: { message?: unknown }
+    choices?: Array<{
+      delta?: { content?: unknown }
+      message?: { content?: unknown }
+      text?: unknown
+    }>
+  }
+  if (data.error?.message) {
+    throw new ApiError(502, 'server_misconfigured', String(data.error.message))
+  }
+  const choice = data.choices?.[0]
+  return contentText(choice?.delta?.content)
+    || contentText(choice?.message?.content)
+    || contentText(choice?.text)
+}
+
+function parseChatDataLine(raw: string): { done: boolean; text: string } | null {
+  const line = raw.trim()
+  if (!line || line.startsWith(':') || !line.startsWith('data:')) return null
+  const data = line.slice(5).trim()
+  if (data === '[DONE]') return { done: true, text: '' }
+  try {
+    return { done: false, text: chatPayloadText(JSON.parse(data)) }
+  } catch (err) {
+    if (err instanceof ApiError) throw err
+    return null
+  }
 }
 
 export async function* streamChatCompletion(
@@ -74,29 +135,58 @@ export async function* streamChatCompletion(
     throw new ApiError(502, 'server_misconfigured', `Failed to reach the OpenAI endpoint: ${(err as Error).message}`)
   }
 
-  if (!response.ok || !response.body) {
+  if (!response.ok) {
     const text = await response.text().catch(() => '')
+    let detail = text.slice(0, 500)
+    try {
+      const data = JSON.parse(text) as { error?: { message?: unknown } }
+      if (data.error?.message) detail = String(data.error.message)
+    } catch {
+    }
     throw new ApiError(
       502,
       'server_misconfigured',
-      `OpenAI request failed (HTTP ${response.status}): ${text.slice(0, 500)}`,
+      `OpenAI request failed (HTTP ${response.status}): ${detail}`,
+    )
+  }
+  if (!response.body) {
+    throw new ApiError(502, 'invalid_response', 'The AI endpoint returned an empty response body')
+  }
+
+  const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+  if (contentType.includes('application/json')) {
+    const raw = await response.text()
+    try {
+      const text = chatPayloadText(JSON.parse(raw))
+      if (text) yield text
+      return
+    } catch (err) {
+      if (err instanceof ApiError) throw err
+      for (const line of raw.split(/\r?\n/)) {
+        const parsed = parseChatDataLine(line)
+        if (parsed?.done) return
+        if (parsed?.text) yield parsed.text
+      }
+      return
+    }
+  }
+
+  const supportedStream = !contentType
+    || contentType.includes('text/event-stream')
+    || contentType.includes('text/plain')
+    || contentType.includes('application/x-ndjson')
+    || contentType.includes('application/octet-stream')
+  if (!supportedStream) {
+    throw new ApiError(
+      502,
+      'server_misconfigured',
+      `The AI endpoint returned ${contentType} instead of an OpenAI-compatible stream. Check the Base URL (it usually must end with /v1).`,
     )
   }
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!contentType.includes('text/event-stream') && !contentType.includes('application/json')) {
-    const peek = await reader.read()
-    const preview = peek.done ? '' : decoder.decode(peek.value).slice(0, 200)
-    reader.releaseLock()
-    throw new ApiError(
-      502,
-      'server_misconfigured',
-      `The AI endpoint returned ${contentType || 'an unknown content type'} instead of an event stream. Check the Base URL (it usually must end with /v1). Preview: ${preview}`,
-    )
-  }
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -105,19 +195,16 @@ export async function* streamChatCompletion(
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
       for (const raw of lines) {
-        const line = raw.trim()
-        if (!line || !line.startsWith('data:')) continue
-        const data = line.slice(5).trim()
-        if (data === '[DONE]') return
-        try {
-          const json = JSON.parse(data) as {
-            choices?: { delta?: { content?: string }; message?: { content?: string } }[]
-          }
-          const delta = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content
-          if (delta) yield delta
-        } catch {
-        }
+        const parsed = parseChatDataLine(raw)
+        if (parsed?.done) return
+        if (parsed?.text) yield parsed.text
       }
+    }
+    buffer += decoder.decode()
+    for (const raw of buffer.split(/\r?\n/)) {
+      const parsed = parseChatDataLine(raw)
+      if (parsed?.done) return
+      if (parsed?.text) yield parsed.text
     }
   } finally {
     reader.releaseLock()
@@ -223,48 +310,90 @@ export async function generateImage(
  * Generate an image via the Responses API with the built-in image_generation tool.
  * Used by proxies (e.g. sub2api) that only expose image generation through /responses.
  *
- * We intentionally do NOT send `tools`/`tool_choice` in the request body: proxies like
- * sub2api auto-inject the image_generation tool on their side, and sending it from the
- * client triggers a different permission path ("client provided tool") that is often
- * disabled for the account group. Sending a plain text input lets the proxy inject the
- * tool and route the request through the enabled path.
+ * Strategy:
+ * - We do NOT send `tools` from the client. Proxies like sub2api auto-inject the
+ *   image_generation tool on their side for Codex-style /responses requests (signaled
+ *   by the `x-openai-actor-authorization: local-image-extension` header). Sending
+ *   `tools` from the client triggers a different permission path ("client provided
+ *   tool") that is often disabled for the account group.
+ * - We DO send `tool_choice: { type: "image_generation" }` to force the model to
+ *   actually call the auto-injected tool. Without this, the model may simply respond
+ *   with text describing how it would generate the image, resulting in a completed
+ *   response with no `image_generation_call` output item.
+ *
+ * If `tool_choice` is rejected by the proxy (e.g. older versions that don't recognize
+ * it without a matching `tools` entry), we fall back to a plain request and rely on
+ * the proxy's auto-injection plus the prompt to trigger the tool call.
  */
 export async function generateImageViaResponses(
   config: ResolvedAiConfig,
   prompt: string,
   options: { size?: '1024x1024' | '1792x1024' | '1024x1792'; signal?: AbortSignal } = {},
 ): Promise<GeneratedImage> {
-  const { apiKey, baseUrl, model } = config
+  const { model } = config
   const sizeHint = options.size ? ` (target size: ${options.size})` : ''
-  const body: Record<string, unknown> = {
-    model,
-    input: [
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text', text: `Generate an image: ${prompt}${sizeHint}` },
-        ],
-      },
-    ],
-    // Force the model to call the image_generation tool (auto-injected by the proxy).
-    // We don't send `tools` to avoid triggering the "client provided tool" permission path.
-    tool_choice: { type: 'image_generation' },
+  const inputText = `Generate an image: ${prompt}${sizeHint}`
+  const buildBody = (withToolChoice: boolean): Record<string, unknown> => {
+    const body: Record<string, unknown> = {
+      model,
+      input: [
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: inputText }],
+        },
+      ],
+    }
+    if (withToolChoice) {
+      body.tool_choice = { type: 'image_generation' }
+    }
+    return body
   }
-  let response: Response
+
+  // First attempt: force the model to call image_generation via tool_choice.
+  // This works with sub2api's auto-injected tool and standard OpenAI Responses API.
+  let response = await sendResponsesRequest(config, buildBody(true), options.signal)
+  // If the proxy rejects tool_choice (e.g. 400 "tool_choice requires tools" or
+  // 403 "Image generation is not enabled"), retry without it as a fallback.
+  if (shouldRetryWithoutToolChoice(response)) {
+    response = await sendResponsesRequest(config, buildBody(false), options.signal)
+  }
+  return parseResponsesResult(response)
+}
+
+function shouldRetryWithoutToolChoice(response: Response): boolean {
+  if (response.status === 200) return false
+  // 4xx errors that suggest tool_choice wasn't accepted
+  return response.status >= 400 && response.status < 500
+}
+
+async function sendResponsesRequest(
+  config: ResolvedAiConfig,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const { apiKey, baseUrl } = config
   try {
-    response = await fetch(`${baseUrl}/responses`, {
+    return await fetch(`${baseUrl}/responses`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        'x-openai-actor-authorization': 'local-image-extension',
       },
       body: JSON.stringify(body),
-      signal: options.signal,
+      signal,
     })
   } catch (err) {
     if ((err as Error)?.name === 'AbortError') throw err
-    throw new ApiError(502, 'server_misconfigured', `Failed to reach the responses endpoint: ${(err as Error).message}`)
+    throw new ApiError(
+      502,
+      'server_misconfigured',
+      `Failed to reach the responses endpoint: ${(err as Error).message}`,
+    )
   }
+}
+
+async function parseResponsesResult(response: Response): Promise<GeneratedImage> {
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     console.error('[inkstone] AI image responses request failed:', {
@@ -326,11 +455,6 @@ export async function generateImageViaResponses(
                 result?: string
                 revised_prompt?: string
               }
-            }
-            // Log every event type for debugging
-            if (evt.type) {
-              const outputSummary = evt.response?.output?.map((o) => `${o.type}:${o.result ? 'has_result' : 'no_result'}`).join(',')
-              console.error(`[inkstone] SSE event: ${evt.type}${outputSummary ? ` output=[${outputSummary}]` : ''}${evt.item ? ` item.type=${evt.item.type}` : ''}`)
             }
             // Completed response carries the full output array
             if (evt.type?.endsWith('.completed') && Array.isArray(evt.response?.output)) {

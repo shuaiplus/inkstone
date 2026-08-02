@@ -30,15 +30,24 @@ export function AiImageDialog({ open, onClose, onInsert }: AiImageDialogProps) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AiImageResponse | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const controllerRef = useRef<AbortController | null>(null)
   const hintId = useId()
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      controllerRef.current?.abort()
+      controllerRef.current = null
+      return
+    }
     setPrompt('')
     setResult(null)
     setLoading(false)
     const timer = window.setTimeout(() => textareaRef.current?.focus(), 0)
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      controllerRef.current?.abort()
+      controllerRef.current = null
+    }
   }, [open])
 
   const sizeOptions: SizeOption[] = [
@@ -50,12 +59,16 @@ export function AiImageDialog({ open, onClose, onInsert }: AiImageDialogProps) {
   const handleGenerate = async () => {
     const trimmed = prompt.trim()
     if (!trimmed || loading) return
+    const controller = new AbortController()
+    controllerRef.current = controller
     setLoading(true)
     setResult(null)
     try {
-      const res = await api.ai.image({ prompt: trimmed, size })
+      const res = await api.ai.image({ prompt: trimmed, size }, controller.signal)
+      if (controller.signal.aborted) return
       setResult(res)
     } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return
       let message: string
       if (err instanceof ApiError) {
         // Show raw code + original message to avoid translation masking the real cause
@@ -65,14 +78,25 @@ export function AiImageDialog({ open, onClose, onInsert }: AiImageDialogProps) {
       }
       toast({ title: t('ai.image_failed'), description: message, tone: 'danger' })
     } finally {
-      setLoading(false)
+      if (controllerRef.current === controller) {
+        controllerRef.current = null
+        setLoading(false)
+      }
     }
+  }
+
+  const handleClose = () => {
+    controllerRef.current?.abort()
+    controllerRef.current = null
+    setLoading(false)
+    onClose()
   }
 
   const handleInsert = () => {
     if (!result) return
-    onInsert(result.url, prompt.trim().slice(0, 60))
-    onClose()
+    const alt = prompt.trim().slice(0, 60).replace(/[\[\]\r\n]/g, '')
+    onInsert(result.url, alt)
+    handleClose()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -85,7 +109,7 @@ export function AiImageDialog({ open, onClose, onInsert }: AiImageDialogProps) {
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title={
         <span className="inline-flex items-center gap-2">
           <span className="ai-brand-text">
@@ -98,7 +122,7 @@ export function AiImageDialog({ open, onClose, onInsert }: AiImageDialogProps) {
       width={560}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={handleClose}>
             {t('common.close')}
           </Button>
           {result && (
@@ -201,7 +225,6 @@ export function AiImageDialog({ open, onClose, onInsert }: AiImageDialogProps) {
               type="button"
               onClick={() => {
                 setResult(null)
-                setPrompt('')
                 window.setTimeout(() => textareaRef.current?.focus(), 0)
               }}
               className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--accent)] hover:underline"

@@ -493,6 +493,12 @@ export interface AiConfigPatch {
   apiKey?: string | null
 }
 
+export interface AiConfigTestRequest {
+  baseUrl?: string
+  model?: string
+  apiKey?: string
+}
+
 export type ApiErrorCode =
   | 'unauthenticated'
   | 'forbidden'

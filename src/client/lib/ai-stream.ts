@@ -8,10 +8,15 @@ import type {
   AiDraftRequest,
   AiEditRequest,
 } from '@shared/types'
+import {
+  getAiGenerationMarker,
+  updateAiGenerationMarker,
+  type AiGenerationPhase,
+} from '../editor/ai-generation'
 
 type ToastFn = (toast: { title: string; description?: string; tone?: 'default' | 'success' | 'warning' | 'danger' }) => void
 
-export type AiMode = 'replace' | 'append' | 'insert'
+export type AiMode = 'replace' | 'append' | 'insert' | 'insert-below'
 
 export type AiTask = 'summarize' | 'polish' | 'draft' | 'edit' | 'continue' | 'image'
 
@@ -23,6 +28,12 @@ export interface AiRunOptions {
   signal?: AbortSignal
   /** topic for 'draft', instruction for 'edit', prompt for 'image' */
   prompt?: string
+  onProgress?: (progress: AiRunProgress) => void
+}
+
+export interface AiRunProgress {
+  phase: AiGenerationPhase
+  characters: number
 }
 
 export interface AiRunContext {
@@ -41,40 +52,16 @@ function captureContext(view: EditorView): AiRunContext {
   return { selection, content, from, to }
 }
 
-function beginInsertion(view: EditorView, mode: AiMode, ctx: AiRunContext): number {
-  if (mode === 'replace' && ctx.from !== ctx.to) {
-    view.dispatch({
-      changes: { from: ctx.from, to: ctx.to, insert: '' },
-      selection: EditorSelection.cursor(ctx.from),
-    })
-    return ctx.from
-  }
-  if (mode === 'append') {
-    const docEnd = view.state.doc.length
-    const insert = '\n\n'
-    view.dispatch({
-      changes: { from: docEnd, insert },
-      selection: EditorSelection.cursor(docEnd + insert.length),
-    })
-    return docEnd + insert.length
-  }
-  const pos = ctx.to
-  return pos
-}
-
-function appendChunk(view: EditorView, position: number, chunk: string): number {
-  const next = position + chunk.length
-  view.dispatch({
-    changes: { from: position, insert: chunk },
-    selection: EditorSelection.cursor(next),
-    scrollIntoView: true,
-    userEvent: 'input.ai',
-  })
-  return next
+function paragraphSeparatorBefore(view: EditorView, position: number): string {
+  if (position === 0) return ''
+  const before = view.state.sliceDoc(Math.max(0, position - 2), position)
+  if (before.endsWith('\n\n')) return ''
+  if (before.endsWith('\n')) return '\n'
+  return '\n\n'
 }
 
 export async function runAiIntoEditor(opts: AiRunOptions): Promise<void> {
-  const { view, task, mode, toast, signal } = opts
+  const { view, task, mode, toast, signal, onProgress } = opts
   if (task === 'image') return
   const ctx = captureContext(view)
 
@@ -100,9 +87,91 @@ export async function runAiIntoEditor(opts: AiRunOptions): Promise<void> {
     }
   }
 
-  const startPos = beginInsertion(view, mode, ctx)
-  let cursor = startPos
+  const initialFrom = mode === 'replace' && ctx.from !== ctx.to
+    ? ctx.from
+    : mode === 'append'
+      ? view.state.doc.length
+      : ctx.to
+  const initialTo = mode === 'replace' && ctx.from !== ctx.to ? ctx.to : initialFrom
+  updateAiGenerationMarker(view, {
+    from: initialFrom,
+    to: initialTo,
+    phase: 'connecting',
+    label: t('ai.connecting'),
+  })
+  onProgress?.({ phase: 'connecting', characters: 0 })
+
   let produced = false
+  let generatedCharacters = 0
+  let pending = ''
+  let animationFrame = 0
+
+  const flushPending = () => {
+    if (!pending || !view.dom.isConnected) return
+    const chunk = pending
+    pending = ''
+    const marker = getAiGenerationMarker(view)
+
+    if (!produced) {
+      const from = Math.min(marker?.from ?? initialFrom, view.state.doc.length)
+      const to = Math.min(Math.max(marker?.to ?? initialTo, from), view.state.doc.length)
+      const separator = mode === 'append' || mode === 'insert-below'
+        ? paragraphSeparatorBefore(view, from)
+        : ''
+      const inserted = `${separator}${chunk}`
+      const generatedFrom = from + separator.length
+      const next = from + inserted.length
+      view.dispatch({
+        changes: { from, to, insert: inserted },
+        selection: EditorSelection.cursor(next),
+        scrollIntoView: true,
+        userEvent: 'input.ai',
+      })
+      updateAiGenerationMarker(view, {
+        from: generatedFrom,
+        to: next,
+        phase: 'streaming',
+        label: t('ai.writing'),
+      })
+      produced = true
+    } else {
+      const current = getAiGenerationMarker(view)
+      const position = Math.min(current?.to ?? view.state.selection.main.head, view.state.doc.length)
+      const generatedFrom = Math.min(current?.from ?? position, position)
+      const next = position + chunk.length
+      view.dispatch({
+        changes: { from: position, insert: chunk },
+        selection: EditorSelection.cursor(next),
+        scrollIntoView: true,
+        userEvent: 'input.ai',
+      })
+      updateAiGenerationMarker(view, {
+        from: generatedFrom,
+        to: next,
+        phase: 'streaming',
+        label: t('ai.writing'),
+      })
+    }
+
+    generatedCharacters += chunk.length
+    onProgress?.({ phase: 'streaming', characters: generatedCharacters })
+  }
+
+  const scheduleFlush = () => {
+    if (animationFrame) return
+    animationFrame = window.requestAnimationFrame(() => {
+      animationFrame = 0
+      flushPending()
+    })
+  }
+
+  const finishPending = () => {
+    if (animationFrame) {
+      window.cancelAnimationFrame(animationFrame)
+      animationFrame = 0
+    }
+    flushPending()
+  }
 
   try {
     let body: AiContentRequest | AiDraftRequest | AiEditRequest | AiContinueRequest
@@ -119,26 +188,25 @@ export async function runAiIntoEditor(opts: AiRunOptions): Promise<void> {
       task,
       body,
       (chunk) => {
-        cursor = appendChunk(view, cursor, chunk)
-        produced = true
+        pending += chunk
+        scheduleFlush()
       },
       signal,
     )
+    finishPending()
     if (produced) {
       view.focus()
     } else {
       toast({ title: t('ai.empty_result'), tone: 'warning' })
-      if (startPos !== ctx.to || mode !== 'insert') {
-        view.dispatch({ changes: { from: startPos, to: cursor, insert: '' } })
-      }
     }
   } catch (err) {
+    finishPending()
     if ((err as Error)?.name === 'AbortError') return
     const message = err instanceof ApiError ? err.message : String(err)
     toast({ title: t('ai.request_failed'), description: message, tone: 'danger' })
-    if (!produced && startPos !== ctx.to) {
-      view.dispatch({ changes: { from: startPos, to: cursor, insert: '' } })
-    }
+  } finally {
+    if (animationFrame) window.cancelAnimationFrame(animationFrame)
+    if (view.dom.isConnected) updateAiGenerationMarker(view, null)
   }
 }
 
@@ -153,13 +221,7 @@ export async function runAiImageIntoEditor(opts: AiRunOptions): Promise<void> {
   try {
     const result = await api.ai.image({ prompt: prompt.trim() }, signal)
     const alt = prompt.trim().slice(0, 60).replace(/[\[\]]/g, '')
-    const md = `![${alt}](${result.url})\n`
-    view.dispatch({
-      changes: { from: ctx.to, insert: md },
-      selection: EditorSelection.cursor(ctx.to + md.length),
-      scrollIntoView: true,
-      userEvent: 'input.ai',
-    })
+    insertMarkdownBlock(view, ctx.to, `![${alt}](${result.url})`)
     view.focus()
     if (result.revisedPrompt) {
       toast({ title: t('ai.image_revised_prompt'), description: result.revisedPrompt, tone: 'default' })
@@ -169,4 +231,25 @@ export async function runAiImageIntoEditor(opts: AiRunOptions): Promise<void> {
     const message = err instanceof ApiError ? err.message : String(err)
     toast({ title: t('ai.image_failed'), description: message, tone: 'danger' })
   }
+}
+
+export function insertMarkdownBlock(view: EditorView, position: number, markdown: string): void {
+  const prefix = paragraphSeparatorBefore(view, position)
+  const after = view.state.sliceDoc(position, Math.min(view.state.doc.length, position + 2))
+  const suffix = position === view.state.doc.length
+    ? '\n'
+    : after.startsWith('\n\n')
+      ? ''
+      : after.startsWith('\n')
+        ? '\n'
+        : '\n\n'
+  const inserted = `${prefix}${markdown.trim()}${suffix}`
+  const next = position + inserted.length
+  view.dispatch({
+    changes: { from: position, insert: inserted },
+    selection: EditorSelection.cursor(next),
+    scrollIntoView: true,
+    userEvent: 'input.ai',
+  })
+  view.focus()
 }

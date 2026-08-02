@@ -1,11 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
 import { Blocks, Bold, Braces, ChevronDown, Code, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Minus, Network, Quote, Sigma, Sparkles, Strikethrough, Table, } from 'lucide-react';
 import { IconButton } from '../../components/primitives';
 import { Menu, Tooltip, type MenuItem } from '../../components/overlay';
 import { cn } from '../../lib/cn';
 import { insertAdvancedCodeBlock, insertBlockId, insertCallout, insertCodeBlock, insertDefinitionList, insertDetails, insertFootnote, insertFrontMatter, insertHorizontalRule, insertImage, insertLink, insertMermaid, insertPandocAttributes, insertTable, insertTabs, insertTag, insertText, setHeading, toggleBlockReference, toggleBold, toggleBulletList, toggleHighlight, toggleInlineCode, toggleInlineMath, toggleInserted, toggleItalic, toggleNoteEmbed, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleSubscript, toggleSuperscript, toggleTaskList, toggleWikiLink, } from '../../editor/commands';
-import { runAiIntoEditor, runAiImageIntoEditor, type AiMode, type AiTask } from '../../lib/ai-stream';
+import { insertMarkdownBlock, runAiIntoEditor, runAiImageIntoEditor, type AiMode, type AiRunProgress, type AiTask } from '../../lib/ai-stream';
 import { useUi } from '../../store/ui';
 import { t } from "../../lib/i18n";
 import { AiInlinePrompt } from './AiInlinePrompt';
@@ -23,11 +23,17 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
     const blockRef = useRef<HTMLButtonElement>(null);
     const aiRef = useRef<HTMLButtonElement>(null);
     const [openMenu, setOpenMenu] = useState<'heading' | 'inline' | 'note' | 'block' | 'ai' | null>(null);
-    const [aiRunning, setAiRunning] = useState<{ task: AiTask; controller: AbortController } | null>(null);
+    const [aiRunning, setAiRunning] = useState<{
+        task: AiTask;
+        controller: AbortController;
+        progress: AiRunProgress;
+    } | null>(null);
+    const aiControllerRef = useRef<AbortController | null>(null);
     const [inlinePrompt, setInlinePrompt] = useState<{ open: boolean; mode: 'draft' | 'edit' | 'continue' }>({ open: false, mode: 'draft' });
     const [imageOpen, setImageOpen] = useState(false);
     const toast = useUi((s) => s.toast);
     const aiDrafting = aiRunning !== null;
+    useEffect(() => () => aiControllerRef.current?.abort(), []);
     const toggleMenu = (menu: 'heading' | 'inline' | 'note' | 'block' | 'ai') => {
         setOpenMenu((current) => current === menu ? null : menu);
     };
@@ -72,12 +78,34 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
     const runAi = (task: AiTask, mode: AiMode, prompt?: string) => {
         if (!view || aiRunning) return;
         const controller = new AbortController();
-        setAiRunning({ task, controller });
+        aiControllerRef.current = controller;
+        setAiRunning({ task, controller, progress: { phase: 'connecting', characters: 0 } });
         setOpenMenu(null);
         const runner = task === 'image' ? runAiImageIntoEditor : runAiIntoEditor;
-        runner({ view, task, mode, toast, signal: controller.signal, prompt })
+        let lastProgressAt = 0;
+        let lastPhase: AiRunProgress['phase'] = 'connecting';
+        runner({
+            view,
+            task,
+            mode,
+            toast,
+            signal: controller.signal,
+            prompt,
+            onProgress: (progress) => {
+                const now = performance.now();
+                if (progress.phase === lastPhase && now - lastProgressAt < 120) return;
+                lastProgressAt = now;
+                lastPhase = progress.phase;
+                setAiRunning((current) => current?.controller === controller
+                    ? { ...current, progress }
+                    : current);
+            },
+        })
             .catch(() => {})
-            .finally(() => setAiRunning(null));
+            .finally(() => {
+                if (aiControllerRef.current === controller) aiControllerRef.current = null;
+                setAiRunning((current) => current?.controller === controller ? null : current);
+            });
     };
     const cancelAi = () => {
         if (!aiRunning) return;
@@ -243,18 +271,11 @@ export function EditorToolbar({ view, onPickImage, mobile = false, }: {
         onClose={() => setImageOpen(false)}
         onInsert={(url, alt) => {
           if (!view) return;
-          const md = `![${alt}](${url})\n`;
           const pos = view.state.selection.main.to;
-          view.dispatch({
-            changes: { from: pos, insert: md },
-            selection: { anchor: pos + md.length },
-            scrollIntoView: true,
-            userEvent: 'input.ai',
-          });
-          view.focus();
+          insertMarkdownBlock(view, pos, `![${alt}](${url})`);
         }}
       />
-      {aiRunning && <AiGeneratingBar task={aiRunning.task} onCancel={cancelAi} />}
+      {aiRunning && <AiGeneratingBar task={aiRunning.task} progress={aiRunning.progress} onCancel={cancelAi} />}
     </div>);
 }
 function MenuButton({ buttonRef, label, open, onClick, children, mobile = false, }: {
