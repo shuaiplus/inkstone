@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Plug } from 'lucide-react'
-import { Input, Select, SettingRow, Switch, Textarea } from '../../components/form'
+import { Input, Segmented, Select, SettingRow, Switch, Textarea } from '../../components/form'
 import { Badge, Button } from '../../components/primitives'
-import { DEFAULT_AI_CONFIG, getAiConfig, setAiConfig, type AiConfig } from '../../lib/ai/config'
+import { CLOUDFLARE_AI_MODELS } from '@shared/ai-models'
+import { DEFAULT_AI_CONFIG, getAiConfig, setAiConfig, type AiConfig, type AiProvider } from '../../lib/ai/config'
 import { classifyAiError, listModels } from '../../lib/ai/ollama'
 import { t } from '../../lib/i18n'
 import { useUi } from '../../store/ui'
@@ -19,6 +20,7 @@ function describeFailure(error: unknown): string {
   const classified = classifyAiError(error)
   if (classified.kind === 'unsupported-browser') return t('settings.ai_error_browser')
   if (classified.kind === 'http') {
+    if (classified.status === 429) return t('settings.ai_error_quota')
     return t('settings.ai_error_http', { status: classified.status ?? 0, detail: classified.detail })
   }
   if (classified.kind === 'unreachable') return t('settings.ai_error_unreachable')
@@ -70,6 +72,7 @@ export function AiSettings() {
     }
   }
 
+  const isCloud = config.provider === 'cloudflare'
   const knownModels = probe.state === 'ok' ? probe.models : []
   const resolvedModel = knownModels.includes(config.model)
     ? config.model
@@ -78,12 +81,49 @@ export function AiSettings() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-sunken)] p-3 text-[12px] leading-relaxed text-[var(--text-tertiary)]">
-        <p>{t('settings.ai_intro')}</p>
-        <p className="mt-1.5">{t('settings.ai_browser_notice')}</p>
+      <div className="space-y-1.5">
+        <div className="text-[13px] font-medium text-[var(--text-primary)]">{t('settings.ai_provider')}</div>
+        <Segmented<AiProvider>
+          value={config.provider}
+          label={t('settings.ai_provider')}
+          options={[
+            { value: 'ollama', label: t('settings.ai_provider_ollama') },
+            { value: 'cloudflare', label: t('settings.ai_provider_cloudflare') },
+          ]}
+          onChange={(provider) => update({ provider })}
+        />
       </div>
 
+      {isCloud ? (
+        <div className="rounded-[var(--r-lg)] border border-[var(--warning)] bg-[var(--bg-sunken)] p-3 text-[12px] leading-relaxed text-[var(--text-secondary)]">
+          <p className="font-medium text-[var(--text-primary)]">{t('settings.ai_cloud_privacy')}</p>
+          <p className="mt-1.5">{t('settings.ai_cloud_quota')}</p>
+        </div>
+      ) : (
+        <div className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-sunken)] p-3 text-[12px] leading-relaxed text-[var(--text-tertiary)]">
+          <p>{t('settings.ai_intro')}</p>
+          <p className="mt-1.5">{t('settings.ai_browser_notice')}</p>
+        </div>
+      )}
+
       <div>
+        {isCloud ? (
+          <SettingRow title={t('settings.ai_model')} description={t('settings.ai_cloud_model_hint')}>
+            <Select
+              value={config.cloudflareModel}
+              className="w-full md:w-[280px]"
+              onChange={(event) => update({ cloudflareModel: event.target.value })}
+            >
+              {CLOUDFLARE_AI_MODELS.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
+                </option>
+              ))}
+            </Select>
+          </SettingRow>
+        ) : null}
+
+        {isCloud ? null : (
         <SettingRow title={t('settings.ai_base_url')} description={t('settings.ai_base_url_hint')}>
           <Input
             value={config.baseUrl}
@@ -93,7 +133,9 @@ export function AiSettings() {
           />
         </SettingRow>
 
+        )}
 
+        {isCloud ? null : (
         <SettingRow title={t('settings.ai_model')} description={t('settings.ai_model_hint')}>
           {knownModels.length > 0 ? (
             <Select
@@ -116,6 +158,7 @@ export function AiSettings() {
             />
           )}
         </SettingRow>
+        )}
 
         <SettingRow title={t('settings.ai_chunk_chars')} description={t('settings.ai_chunk_chars_hint')}>
           <Input
@@ -154,6 +197,7 @@ export function AiSettings() {
         />
       </div>
 
+      {isCloud ? null : (
       <div className="space-y-2">
         <Button
           type="button"
@@ -181,6 +225,7 @@ export function AiSettings() {
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }

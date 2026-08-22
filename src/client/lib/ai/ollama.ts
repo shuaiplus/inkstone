@@ -1,5 +1,6 @@
+import { CLIENT_HEADER } from '@shared/constants'
 import { t } from '../i18n'
-import { getAiConfig, normalizeBaseUrl } from './config'
+import { getAiConfig, normalizeBaseUrl, type AiConfig } from './config'
 import { detectLoss, splitForChunking, type LossReport } from './guard'
 
 export const AI_SYSTEM_PROMPT_CONVERT =
@@ -174,6 +175,21 @@ async function readErrorBody(response: Response): Promise<string> {
   }
 }
 
+export function resolveChatEndpoint(config: AiConfig): string {
+  if (config.provider === 'cloudflare') return '/api/ai/chat'
+  return `${normalizeBaseUrl(config.baseUrl)}/chat/completions`
+}
+
+export function activeModel(config: AiConfig): string {
+  return config.provider === 'cloudflare' ? config.cloudflareModel : config.model
+}
+
+export function chatHeaders(config: AiConfig): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (config.provider === 'cloudflare') headers[CLIENT_HEADER] = '1'
+  return headers
+}
+
 export async function listModels(baseUrl: string, signal?: AbortSignal): Promise<string[]> {
   const response = await fetch(`${normalizeBaseUrl(baseUrl)}/models`, { signal })
   if (!response.ok) throw httpFailure(response.status, await readErrorBody(response))
@@ -200,6 +216,7 @@ export function buildMessages(
 
 async function streamOnce(
   endpoint: string,
+  headers: Record<string, string>,
   model: string,
   maxTokens: number,
   messages: ChatMessage[],
@@ -208,7 +225,7 @@ async function streamOnce(
 ): Promise<{ text: string; usage: TokenUsage | null; finishReason: string | null }> {
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model,
       messages,
@@ -274,8 +291,9 @@ export async function streamMarkdown(options: StreamOptions): Promise<StreamResu
     )
     if (index > 0) options.onToken?.('\n\n')
     const piece = await streamOnce(
-      `${normalizeBaseUrl(config.baseUrl)}/chat/completions`,
-      config.model,
+      resolveChatEndpoint(config),
+      chatHeaders(config),
+      activeModel(config),
       config.maxTokens,
       messages,
       options.signal,

@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AI_CONFIG_STORAGE_KEY } from './config'
+import { AI_CONFIG_STORAGE_KEY, DEFAULT_AI_CONFIG } from './config'
+import { CLIENT_HEADER } from '@shared/constants'
 import {
   buildMessages,
+  chatHeaders,
+  resolveChatEndpoint,
   chunkNotice,
   classifyAiError,
   isSafariLikeBrowser,
@@ -167,6 +170,25 @@ describe('buildMessages', () => {
 describe('chunkNotice', () => {
   it('tells the model which slice it is looking at', () => {
     expect(chunkNotice(2, 5)).toContain('part 2 of 5')
+  })
+})
+
+describe('resolveChatEndpoint and chatHeaders', () => {
+  const ollama = { ...DEFAULT_AI_CONFIG }
+  const cloud = { ...DEFAULT_AI_CONFIG, provider: 'cloudflare' as const }
+
+  it('points at the local Ollama endpoint by default', () => {
+    expect(resolveChatEndpoint(ollama)).toBe('http://127.0.0.1:11434/v1/chat/completions')
+  })
+
+  it('points at the same-origin route when the cloud provider is chosen', () => {
+    expect(resolveChatEndpoint(cloud)).toBe('/api/ai/chat')
+  })
+
+  it('sends the client header only to our own API, since Ollama does not allow it through CORS', () => {
+    expect(chatHeaders(cloud)[CLIENT_HEADER]).toBe('1')
+    expect(chatHeaders(ollama)[CLIENT_HEADER]).toBeUndefined()
+    expect(chatHeaders(ollama)['Content-Type']).toBe('application/json')
   })
 })
 
