@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { Blocks, Bold, Braces, ChevronDown, Code, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Minus, Network, Quote, Sigma, Strikethrough, Table, } from 'lucide-react';
+import { Blocks, Bold, Braces, ChevronDown, Code, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Minus, Network, Quote, Sigma, Sparkles, Strikethrough, Table, } from 'lucide-react';
 import { IconButton } from '../../components/primitives';
 import { Menu, Tooltip, type MenuItem } from '../../components/overlay';
 import { cn } from '../../lib/cn';
 import { insertAdvancedCodeBlock, insertBlockId, insertCallout, insertCodeBlock, insertDefinitionList, insertDetails, insertFootnote, insertFrontMatter, insertHorizontalRule, insertImage, insertLink, insertMermaid, insertPandocAttributes, insertTable, insertTabs, insertTag, insertText, setHeading, toggleBlockReference, toggleBold, toggleBulletList, toggleHighlight, toggleInlineCode, toggleInlineMath, toggleInserted, toggleItalic, toggleNoteEmbed, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleSubscript, toggleSuperscript, toggleTaskList, toggleWikiLink, } from '../../editor/commands';
 import { t } from "../../lib/i18n";
+import { openAiTidyForActiveNote } from '../ai/open-tidy';
 export function EditorToolbar({ runCommand, view, onPickImage, mobile = false, }: {
     runCommand?: (command: (target: EditorView) => boolean) => void;
     view?: EditorView | null;
@@ -132,6 +133,12 @@ export function EditorToolbar({ runCommand, view, onPickImage, mobile = false, }
       <MenuButton buttonRef={blockRef} label={t("workspace.more_blocks")} mobile={mobile} open={openMenu === 'block'} onClick={() => toggleMenu('block')}>
         <Blocks size={14}/>
       </MenuButton>
+
+      <Divider />
+
+      <ToolButton label={t("workspace.ai_tidy")} onClick={openAiTidyForActiveNote}>
+        <Sparkles size={14}/>
+      </ToolButton>
 
       <Menu anchor={headingRef} open={openMenu === 'heading'} onClose={() => setOpenMenu(null)} items={headingItems} width={168} label={t("workspace.title_level")}/>
       <Menu anchor={inlineRef} open={openMenu === 'inline'} onClose={() => setOpenMenu(null)} items={inlineItems} width={184} label={t("workspace.more_inline_styles")}/>

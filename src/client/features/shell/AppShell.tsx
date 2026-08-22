@@ -20,6 +20,7 @@ const SettingsPanel = lazy(() => import('../settings/SettingsPanel').then((m) =>
 const ShortcutsPanel = lazy(() => import('../command/ShortcutsPanel').then((m) => ({ default: m.ShortcutsPanel })));
 const GraphPanel = lazy(() => import('../graph/GraphPanel').then((m) => ({ default: m.GraphPanel })));
 const SharePanel = lazy(() => import('../share/SharePanel').then((m) => ({ default: m.SharePanel })));
+const AiPanel = lazy(() => import('../ai/AiPanel').then((m) => ({ default: m.AiPanel })));
 const VersionsPanel = lazy(() => import('../workspace/VersionsPanel').then((m) => ({ default: m.VersionsPanel })));
 const Lightbox = lazy(() => import('../preview/Lightbox').then((m) => ({ default: m.Lightbox })));
 const UpdateDialog = lazy(() => import('../update/UpdateDialog').then((m) => ({ default: m.UpdateDialog })));
@@ -173,6 +174,7 @@ function OverlayHost() {
         {panel === 'graph' && <GraphPanel onClose={closePanel}/>}
         {panel === 'share' && <SharePanel onClose={closePanel}/>}
         {panel === 'versions' && <VersionsPanel onClose={closePanel}/>}
+        {panel === 'ai' && <AiPanel onClose={closePanel}/>}
         {lightbox && <Lightbox />}
       </Suspense>
       {role === 'owner' && updateDialogOpen && (<Suspense fallback={null}>
