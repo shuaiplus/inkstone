@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, FilePlus2, Replace, Settings2, Square, Wand2 } from 'lucide-react'
+import { AlertTriangle, Check, FilePlus2, Replace, Settings2, Square, Wand2 } from 'lucide-react'
 import { Textarea } from '../../components/form'
 import { Modal } from '../../components/overlay'
 import { Button } from '../../components/primitives'
 import type { LossReport } from '../../lib/ai/guard'
-import { AI_SYSTEM_PROMPT_CONVERT, AI_SYSTEM_PROMPT_TIDY, classifyAiError, streamMarkdown } from '../../lib/ai/ollama'
+import {
+  AI_SYSTEM_PROMPT_CONVERT,
+  AI_SYSTEM_PROMPT_SUMMARIZE,
+  AI_SYSTEM_PROMPT_TIDY,
+  AI_SYSTEM_PROMPT_TITLE,
+  classifyAiError,
+  streamMarkdown,
+} from '../../lib/ai/ollama'
 import { t } from '../../lib/i18n'
 import { useNotes } from '../../store/notes'
 import { useUi } from '../../store/ui'
 import { readTextFile } from './read-text-file'
-import { applyToTarget, isTargetUnchanged, takeAiPanelRequest, type AiPanelRequest } from './request'
+import { applyToTarget, isTargetUnchanged, takeAiPanelRequest, type AiPanelMode, type AiPanelRequest } from './request'
+import { insertSummary, normalizeTitle } from './summary'
 
 function lossMessage(loss: LossReport): string {
   if (loss.kind === 'truncated') return t('ai.loss_truncated')
@@ -26,6 +34,48 @@ function failureMessage(error: unknown): string {
   return t('settings.ai_error_unknown', { detail: classified.detail })
 }
 
+const SYSTEM_PROMPTS: Record<AiPanelMode, string> = {
+  convert: AI_SYSTEM_PROMPT_CONVERT,
+  tidy: AI_SYSTEM_PROMPT_TIDY,
+  summarize: AI_SYSTEM_PROMPT_SUMMARIZE,
+  title: AI_SYSTEM_PROMPT_TITLE,
+}
+
+const PANEL_WIDTHS: Record<AiPanelMode, number> = {
+  convert: 720,
+  tidy: 720,
+  summarize: 720,
+  title: 480,
+}
+
+const ACCEPT_ICONS = {
+  convert: FilePlus2,
+  tidy: Replace,
+  summarize: Check,
+  title: Check,
+} as const
+
+const ACCEPT_LABEL_KEYS = {
+  convert: 'ai.create_note',
+  tidy: 'ai.replace_note',
+  summarize: 'ai.insert_summary',
+  title: 'ai.apply_title',
+} as const
+
+const PANEL_TITLE_KEYS = {
+  convert: 'ai.convert_title',
+  tidy: 'ai.tidy_title',
+  summarize: 'ai.summarize_title',
+  title: 'ai.title_title',
+} as const
+
+const PANEL_DESCRIPTION_KEYS = {
+  convert: 'ai.convert_description',
+  tidy: 'ai.tidy_description',
+  summarize: 'ai.summarize_description',
+  title: 'ai.title_description',
+} as const
+
 const FALLBACK_REQUEST: AiPanelRequest = { mode: 'convert', input: '', target: null }
 
 export function AiPanel({ onClose }: { onClose: () => void }) {
@@ -36,6 +86,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
   const openPanel = useUi((state) => state.openPanel)
   const createNote = useNotes((state) => state.createNote)
   const editContent = useNotes((state) => state.editContent)
+  const editTitle = useNotes((state) => state.editTitle)
 
   const [input, setInput] = useState(request.input)
   const [output, setOutput] = useState('')
@@ -59,7 +110,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     try {
       const result = await streamMarkdown({
         input,
-        systemPrompt: request.mode === 'tidy' ? AI_SYSTEM_PROMPT_TIDY : AI_SYSTEM_PROMPT_CONVERT,
+        systemPrompt: SYSTEM_PROMPTS[request.mode],
         signal: controller.signal,
         onToken: (delta) => setOutput((current) => current + delta),
         onChunk: (index, total) => setProgress(total > 1 ? { index, total } : null),
@@ -84,22 +135,58 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     if (id) onClose()
   }
 
-  const acceptAsReplacement = () => {
+  const currentNote = () => {
     const target = request.target
-    if (!target) return
+    if (!target) return null
     const state = useNotes.getState()
     const note = state.notes[target.noteId]
     const current = state.contents[target.noteId]
     if (!note || current === undefined) {
       toast({ title: t('ai.target_note_gone'), tone: 'danger' })
-      return
+      return null
     }
-    if (!isTargetUnchanged(current, target)) {
+    return { target, current }
+  }
+
+  const acceptAsReplacement = () => {
+    const found = currentNote()
+    if (!found) return
+    if (!isTargetUnchanged(found.current, found.target)) {
       toast({ title: t('ai.target_note_changed'), tone: 'danger' })
       return
     }
-    editContent(target.noteId, applyToTarget(current, target, output))
+    editContent(found.target.noteId, applyToTarget(found.current, found.target, output))
     onClose()
+  }
+
+  const acceptAsSummary = () => {
+    const found = currentNote()
+    if (!found) return
+    if (!isTargetUnchanged(found.current, found.target)) {
+      toast({ title: t('ai.target_note_changed'), tone: 'danger' })
+      return
+    }
+    editContent(found.target.noteId, insertSummary(found.current, output))
+    onClose()
+  }
+
+  const acceptAsTitle = () => {
+    const found = currentNote()
+    if (!found) return
+    const next = normalizeTitle(output)
+    if (!next) {
+      toast({ title: t('ai.title_empty'), tone: 'danger' })
+      return
+    }
+    editTitle(found.target.noteId, next)
+    onClose()
+  }
+
+  const accept = async () => {
+    if (request.mode === 'convert') return acceptAsNewNote()
+    if (request.mode === 'tidy') return acceptAsReplacement()
+    if (request.mode === 'summarize') return acceptAsSummary()
+    return acceptAsTitle()
   }
 
   const acceptFile = async (file: File) => {
@@ -116,8 +203,9 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
     toast({ title: reasons[result.reason], tone: 'danger' })
   }
 
-  const title = request.mode === 'tidy' ? t('ai.tidy_title') : t('ai.convert_title')
-  const description = request.mode === 'tidy' ? t('ai.tidy_description') : t('ai.convert_description')
+  const AcceptIcon = ACCEPT_ICONS[request.mode]
+  const title = t(PANEL_TITLE_KEYS[request.mode])
+  const description = t(PANEL_DESCRIPTION_KEYS[request.mode])
 
   return (
     <Modal
@@ -125,7 +213,7 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       title={title}
       description={description}
-      width={720}
+      width={PANEL_WIDTHS[request.mode]}
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2">
           {running ? (
@@ -143,27 +231,15 @@ export function AiPanel({ onClose }: { onClose: () => void }) {
               {output ? t('ai.run_again') : t('ai.run')}
             </Button>
           )}
-          {request.mode === 'tidy' ? (
-            <Button
-              type="button"
-              variant="primary"
-              icon={<Replace size={13} />}
-              onClick={acceptAsReplacement}
-              disabled={running || !output}
-            >
-              {t('ai.replace_note')}
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="primary"
-              icon={<FilePlus2 size={13} />}
-              onClick={() => void acceptAsNewNote()}
-              disabled={running || !output}
-            >
-              {t('ai.create_note')}
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="primary"
+            icon={<AcceptIcon size={13} />}
+            onClick={() => void accept()}
+            disabled={running || !output}
+          >
+            {t(ACCEPT_LABEL_KEYS[request.mode])}
+          </Button>
         </div>
       }
     >

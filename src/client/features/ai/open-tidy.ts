@@ -26,3 +26,31 @@ export function openAiTidyForActiveNote(): void {
   const noteId = useUi.getState().activeNoteId
   if (noteId) openAiTidyForNote(noteId)
 }
+
+function openAiForNote(noteId: string, mode: 'summarize' | 'title'): void {
+  const body = useNotes.getState().contents[noteId] ?? ''
+  setAiPanelRequest({
+    mode,
+    input: body,
+    target: { noteId, from: WHOLE_NOTE_RANGE, to: WHOLE_NOTE_RANGE, originalText: body },
+  })
+  useUi.getState().openPanel('ai')
+}
+
+export function openAiSummarizeForNote(noteId: string): void {
+  openAiForNote(noteId, 'summarize')
+}
+
+export function openAiTitleForNote(noteId: string): void {
+  openAiForNote(noteId, 'title')
+}
+
+export function openAiSummarizeForActiveNote(): void {
+  const noteId = useUi.getState().activeNoteId
+  if (noteId) openAiSummarizeForNote(noteId)
+}
+
+export function openAiTitleForActiveNote(): void {
+  const noteId = useUi.getState().activeNoteId
+  if (noteId) openAiTitleForNote(noteId)
+}

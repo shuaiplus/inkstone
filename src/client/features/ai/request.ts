@@ -1,4 +1,4 @@
-export type AiPanelMode = 'convert' | 'tidy'
+export type AiPanelMode = 'convert' | 'tidy' | 'summarize' | 'title'
 
 export interface AiPanelTarget {
   noteId: string

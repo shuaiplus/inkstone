@@ -15,7 +15,7 @@ import { createContextualNote, useNotes } from '../../store/notes';
 import { folderPathLabel, openFolderView } from '../../lib/folders';
 import { useSession } from '../../store/session';
 import { t, useLocale } from "../../lib/i18n";
-import { openAiTidyForNote } from '../ai/open-tidy';
+import { openAiSummarizeForNote, openAiTidyForNote, openAiTitleForNote } from '../ai/open-tidy';
 import { setAiPanelRequest } from '../ai/request';
 interface Item {
     id: string;
@@ -152,6 +152,22 @@ export function CommandPalette({ onClose }: {
                         icon: <Wand2 size={14}/>,
                         group: t("common.current_note"),
                         run: () => openAiTidyForNote(activeNote.id),
+                    },
+                    {
+                        id: 'cmd-ai-summarize',
+                        kind: 'command' as const,
+                        label: t("command.ai_summarize_current_note"),
+                        icon: <Sparkles size={14}/>,
+                        group: t("common.current_note"),
+                        run: () => openAiSummarizeForNote(activeNote.id),
+                    },
+                    {
+                        id: 'cmd-ai-title',
+                        kind: 'command' as const,
+                        label: t("command.ai_title_current_note"),
+                        icon: <Sparkles size={14}/>,
+                        group: t("common.current_note"),
+                        run: () => openAiTitleForNote(activeNote.id),
                     },
                     {
                         id: 'cmd-delete',
