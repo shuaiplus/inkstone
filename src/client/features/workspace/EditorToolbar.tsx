@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { Blocks, Bold, Braces, ChevronDown, Code, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Minus, Network, Quote, Sigma, Strikethrough, Table, } from 'lucide-react';
+import { Blocks, Bold, Braces, ChevronDown, Code, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Minus, Network, Quote, Sigma, Sparkles, Strikethrough, Table, } from 'lucide-react';
 import { IconButton } from '../../components/primitives';
 import { Menu, Tooltip, type MenuItem } from '../../components/overlay';
 import { cn } from '../../lib/cn';
 import { insertAdvancedCodeBlock, insertBlockId, insertCallout, insertCodeBlock, insertDetails, insertFootnote, insertFrontMatter, insertHorizontalRule, insertImage, insertLink, insertMermaid, insertTable, insertTabs, insertTag, insertText, setHeading, toggleBlockReference, toggleBold, toggleBulletList, toggleHighlight, toggleInlineCode, toggleInlineMath, toggleItalic, toggleNoteEmbed, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleTaskList, toggleWikiLink, } from '../../editor/commands';
 import { t } from "../../lib/i18n";
+import { openAiSummarizeForActiveNote, openAiTidyForActiveNote, openAiTitleForActiveNote } from '../ai/open-tidy';
 export function EditorToolbar({ runCommand, view, onPickImage, mobile = false, }: {
     runCommand?: (command: (target: EditorView) => boolean) => void;
     view?: EditorView | null;
@@ -16,8 +17,9 @@ export function EditorToolbar({ runCommand, view, onPickImage, mobile = false, }
     const inlineRef = useRef<HTMLButtonElement>(null);
     const noteRef = useRef<HTMLButtonElement>(null);
     const blockRef = useRef<HTMLButtonElement>(null);
-    const [openMenu, setOpenMenu] = useState<'heading' | 'inline' | 'note' | 'block' | null>(null);
-    const toggleMenu = (menu: 'heading' | 'inline' | 'note' | 'block') => {
+    const aiRef = useRef<HTMLButtonElement>(null);
+    const [openMenu, setOpenMenu] = useState<'heading' | 'inline' | 'note' | 'block' | 'ai' | null>(null);
+    const toggleMenu = (menu: 'heading' | 'inline' | 'note' | 'block' | 'ai') => {
         setOpenMenu((current) => current === menu ? null : menu);
     };
     const run = (command: (target: EditorView) => boolean) => () => {
@@ -56,6 +58,11 @@ export function EditorToolbar({ runCommand, view, onPickImage, mobile = false, }
         { id: 'details', label: t("workspace.details_block"), onSelect: run(insertDetails) },
         { id: 'tabs', label: t("common.tabs"), onSelect: run(insertTabs) },
         { id: 'front-matter', label: 'Front Matter', onSelect: run(insertFrontMatter), separatorBefore: true },
+    ];
+    const aiItems: MenuItem[] = [
+        { id: 'ai-tidy', label: t("workspace.ai_tidy"), onSelect: openAiTidyForActiveNote },
+        { id: 'ai-summarize', label: t("workspace.ai_summarize"), onSelect: openAiSummarizeForActiveNote },
+        { id: 'ai-title', label: t("workspace.ai_title"), onSelect: openAiTitleForActiveNote },
     ];
     return (<div className={cn('flex shrink-0 items-center overflow-x-auto border-b border-[var(--border-subtle)] px-2 no-scrollbar', mobile ? 'h-11 gap-1' : 'h-9 gap-0.5')}>
       <Tooltip label={t("workspace.title_748d7d")}>
@@ -128,10 +135,17 @@ export function EditorToolbar({ runCommand, view, onPickImage, mobile = false, }
         <Blocks size={14}/>
       </MenuButton>
 
+      <Divider />
+
+      <MenuButton buttonRef={aiRef} label={t("workspace.ai_actions")} mobile={mobile} open={openMenu === 'ai'} onClick={() => toggleMenu('ai')}>
+        <Sparkles size={14}/>
+      </MenuButton>
+
       <Menu anchor={headingRef} open={openMenu === 'heading'} onClose={() => setOpenMenu(null)} items={headingItems} width={168} label={t("workspace.title_level")}/>
       <Menu anchor={inlineRef} open={openMenu === 'inline'} onClose={() => setOpenMenu(null)} items={inlineItems} width={184} label={t("workspace.more_inline_styles")}/>
       <Menu anchor={noteRef} open={openMenu === 'note'} onClose={() => setOpenMenu(null)} items={noteItems} width={184} label={t("workspace.note_syntax")}/>
       <Menu anchor={blockRef} open={openMenu === 'block'} onClose={() => setOpenMenu(null)} items={blockItems} width={192} label={t("workspace.more_blocks")}/>
+      <Menu anchor={aiRef} open={openMenu === 'ai'} onClose={() => setOpenMenu(null)} items={aiItems} width={176} label={t("workspace.ai_actions")}/>
     </div>);
 }
 function MenuButton({ buttonRef, label, open, onClick, children, mobile = false, }: {

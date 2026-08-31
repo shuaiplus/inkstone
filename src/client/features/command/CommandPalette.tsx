@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Archive, Clock, Columns2, Download, Eye, FileText, FolderPlus, Hash, Keyboard, Moon, Palette, Pencil, Plus, Search, Settings, Share2, Star, Sun, Trash2, Waypoints, X, } from 'lucide-react';
+import { Archive, Clock, Columns2, Download, Eye, FileText, FolderPlus, Hash, Keyboard, Moon, Palette, Pencil, Plus, Search, Settings, Share2, Sparkles, Star, Sun, Trash2, Wand2, Waypoints, X, } from 'lucide-react';
 import type { NoteSummary, SearchHit } from '@shared/types';
 import { truncateText } from '@shared/text-utils';
 import { cn } from '../../lib/cn';
@@ -15,6 +15,8 @@ import { createContextualNote, useNotes } from '../../store/notes';
 import { folderPathLabel, openFolderView } from '../../lib/folders';
 import { useSession } from '../../store/session';
 import { t, useLocale } from "../../lib/i18n";
+import { openAiSummarizeForNote, openAiTidyForNote, openAiTitleForNote } from '../ai/open-tidy';
+import { setAiPanelRequest } from '../ai/request';
 interface Item {
     id: string;
     kind: 'command' | 'note' | 'tag' | 'folder';
@@ -105,6 +107,17 @@ export function CommandPalette({ onClose }: {
                 group: t("command.commands"),
                 run: () => void createFolder(),
             },
+            {
+                id: 'cmd-ai-convert',
+                kind: 'command',
+                label: t("command.ai_convert_to_markdown"),
+                icon: <Sparkles size={14}/>,
+                group: t("command.commands"),
+                run: () => {
+                    setAiPanelRequest({ mode: 'convert', input: '', target: null });
+                    openPanel('ai');
+                },
+            },
             ...(activeNote
                 ? [
                     {
@@ -131,6 +144,30 @@ export function CommandPalette({ onClose }: {
                         icon: <Share2 size={14}/>,
                         group: t("common.current_note"),
                         run: () => openPanel('share'),
+                    },
+                    {
+                        id: 'cmd-ai-tidy',
+                        kind: 'command' as const,
+                        label: t("command.ai_tidy_current_note"),
+                        icon: <Wand2 size={14}/>,
+                        group: t("common.current_note"),
+                        run: () => openAiTidyForNote(activeNote.id),
+                    },
+                    {
+                        id: 'cmd-ai-summarize',
+                        kind: 'command' as const,
+                        label: t("command.ai_summarize_current_note"),
+                        icon: <Sparkles size={14}/>,
+                        group: t("common.current_note"),
+                        run: () => openAiSummarizeForNote(activeNote.id),
+                    },
+                    {
+                        id: 'cmd-ai-title',
+                        kind: 'command' as const,
+                        label: t("command.ai_title_current_note"),
+                        icon: <Sparkles size={14}/>,
+                        group: t("common.current_note"),
+                        run: () => openAiTitleForNote(activeNote.id),
                     },
                     {
                         id: 'cmd-delete',
