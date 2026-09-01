@@ -18,8 +18,11 @@ import { transferRoutes } from './routes/transfer'
 import { updateRoutes } from './routes/update'
 import { mcpAuthorizeRoutes } from './routes/mcp-authorize'
 import { mcpSettingsRoutes } from './routes/mcp-settings'
+import { aiRoutes } from './routes/ai'
 import type { AppBindings } from './env'
 import { selectAttachmentStorage } from './attachments/backend'
+
+const LOCAL_AI_CONNECT_SRC = "'self' http://127.0.0.1:11434 http://localhost:11434"
 
 export function createApp() {
   const app = new Hono<AppBindings>()
@@ -37,7 +40,7 @@ export function createApp() {
     c.header(
       'Content-Security-Policy',
         "default-src 'self'; base-uri 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-        `img-src 'self' data: blob: ${imageSchemes}; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; ` +
+        `img-src 'self' data: blob: ${imageSchemes}; font-src 'self' data:; connect-src ${LOCAL_AI_CONNECT_SRC}; worker-src 'self' blob:; ` +
         `manifest-src 'self'; media-src 'self' blob:; form-action ${formAction}; frame-src 'none'; ` +
         "frame-ancestors 'none'; object-src 'none'",
     )
@@ -97,6 +100,7 @@ export function createApp() {
   app.route('/api/settings', settingsRoutes)
   app.route('/api/update', updateRoutes)
   app.route('/api/mcp', mcpSettingsRoutes)
+  app.route('/api/ai', aiRoutes)
   app.route('/api/share', shareManageRoutes)
   app.route('/api/public', shareRoutes)
   app.route('/api', transferRoutes)

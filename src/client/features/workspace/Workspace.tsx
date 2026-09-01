@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { EditorView } from '@codemirror/view';
+import { setActiveEditorView } from '../ai/active-editor';
 import { ArrowLeft, Columns2, Download, Eye, FileCode, FileDown, FileText, FolderClosed, Hash, History, Link as LinkIcon, ListTree, MoreHorizontal, PanelRightClose, Pencil, Plus, Share2, Star, X, } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { api } from '../../lib/api';
@@ -70,7 +71,11 @@ export function Workspace({ mobileLayout = 'edit', onMobileBack, pane = 'active'
     const titleInputRef = useRef<HTMLInputElement>(null);
     const moreButtonRef = useRef<HTMLButtonElement>(null);
     const exportMenuRef = useRef<HTMLButtonElement>(null);
-    const [view, setView] = useState<EditorView | null>(null);
+    const [view, setViewState] = useState<EditorView | null>(null);
+    const setView = useCallback((next: EditorView | null) => {
+        setViewState(next);
+        setActiveEditorView(next);
+    }, []);
     const [headings, setHeadings] = useState<Heading[]>([]);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     const [exportMenuOpen, setExportMenuOpen] = useState(false);
