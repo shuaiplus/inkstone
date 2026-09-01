@@ -8,6 +8,7 @@ import { UI_STORAGE_KEY } from '../lib/runtime'
 const STORAGE_KEY = UI_STORAGE_KEY
 
 export type PanelName =
+  | 'ai'
   | 'command'
   | 'search'
   | 'settings'
