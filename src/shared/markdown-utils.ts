@@ -447,10 +447,45 @@ const ATTACHMENT_REFERENCE_RE =
 
 
 export function extractAttachmentIds(content: string): string[] {
-  const safe = stripCodeRegions(splitFrontMatter(content).body)
+  const body = splitFrontMatter(content).body
   const ids = new Set<string>()
-  for (const match of safe.matchAll(ATTACHMENT_REFERENCE_RE)) ids.add(match[1]!)
+  for (const match of stripCodeRegions(body).matchAll(ATTACHMENT_REFERENCE_RE)) ids.add(match[1]!)
+  // md-example fences are rendered as live markdown by the client renderer,
+  // so references inside them count even though stripCodeRegions discards
+  // them as ordinary code regions.
+  for (const inner of markdownExampleBodies(body)) {
+    for (const id of extractAttachmentIds(inner)) ids.add(id)
+  }
   return [...ids]
+}
+
+function markdownExampleBodies(text: string): string[] {
+  const bodies: string[] = []
+  const lines = text.split('\n')
+  let fenceChar = ''
+  let fenceLen = 0
+  let collecting: string[] | null = null
+  for (const line of lines) {
+    const fence = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/.exec(line)
+    if (fence) {
+      const marker = fence[1]!
+      if (collecting === null) {
+        if (/^\s*(?:md-example|markdown-example)\b/.test(fence[2] ?? '')) {
+          fenceChar = marker[0]!
+          fenceLen = marker.length
+          collecting = []
+        }
+      } else if (marker[0]! === fenceChar && marker.length >= fenceLen && !(fence[2] ?? '').trim()) {
+        // A closing fence may only be followed by spaces or tabs.
+        bodies.push(collecting.join('\n'))
+        collecting = null
+      }
+      continue
+    }
+    if (collecting !== null) collecting.push(line)
+  }
+  if (collecting) bodies.push(collecting.join('\n'))
+  return bodies
 }
 
 export function normalizeLinkKey(title: string): string {
