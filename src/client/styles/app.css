@@ -668,6 +668,12 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  [data-mermaid-render-host],
+  [data-mermaid-render-host] *,
+  [data-mermaid-render-host] *::before,
+  [data-mermaid-render-host] *::after {
+    transition-property: none !important;
+  }
 }
 
 
