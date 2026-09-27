@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll } from 'vitest'
 import { Hono } from 'hono'
 import { blogRoutes } from '../src/worker/blog/routes'
+import { shareManageRoutes } from '../src/worker/routes/share'
 import { errorResponse } from '../src/worker/lib/errors'
 import { hashPassword } from '../src/worker/lib/password'
 import type { AppBindings } from '../src/worker/env'
@@ -83,6 +84,43 @@ function makeApp() {
   app.onError((err, c) => errorResponse(c, err))
   app.route('/', blogRoutes)
   return app
+}
+
+function makeShareDb(): MockDb {
+  return {
+    prepare(sql: string) {
+      return {
+        bind(...args: unknown[]) {
+          return {
+            async all<T = unknown>() {
+              return { results: [] as T[] }
+            },
+            async first<T = unknown>() {
+              if (sql.includes('FROM shares WHERE note_id')) {
+                return {
+                  slug: 'abc123',
+                  note_id: 'n1',
+                  user_id: 'u1',
+                  password_hash: null,
+                  expires_at: null,
+                  views: 0,
+                  created_at: 1700000000000,
+                  blog_published: 1,
+                } as T | null
+              }
+              return null as T | null
+            },
+            async run() {
+              return { success: true }
+            },
+          }
+        },
+      }
+    },
+    async batch() {
+      return []
+    },
+  }
 }
 
 function env(db: MockDb): AppBindings['Bindings'] {
@@ -174,5 +212,19 @@ describe('blog routes', () => {
     expect(await res.json()).toEqual({
       error: { code: 'invalid_credentials', message: 'Invalid blog password' },
     })
+  })
+
+  it('share create/get responses omit blogPublished', async () => {
+    const app = new Hono<AppBindings>()
+    app.use('/api/share/*', async (c, next) => {
+      c.set('userId', 'u1')
+      await next()
+    })
+    app.onError((err, c) => errorResponse(c, err))
+    app.route('/api/share', shareManageRoutes)
+    const res = await app.request('/api/share/n1', {}, env(makeShareDb()))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { share: Record<string, unknown> }
+    expect(body.share).not.toHaveProperty('blogPublished')
   })
 })

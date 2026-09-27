@@ -43,6 +43,8 @@ interface AttachmentRow {
 const ATTACHMENT_LIST_PAGE_SIZE = 500
 const ATTACHMENT_SCAN_PAGE_SIZE = 100
 
+const BLOG_PRIVATE_TAG = 'blog-private'
+
 function encodeContentDispositionFilename(filename: string): string {
   return encodeURIComponent(filename).replace(/['()*]/g, (character) =>
     `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
@@ -233,7 +235,10 @@ filesRoutes.get('/:id', async (c) => {
   let allowed = Boolean(userId && userId === row.user_id)
   if (!allowed && isValidSlug(shareSlug)) {
     const share = await c.env.DB.prepare(
-      `SELECT s.slug, s.password_hash, s.blog_published, s.user_id, n.content
+      `SELECT s.slug, s.password_hash,
+              EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+                       WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name = '${BLOG_PRIVATE_TAG}') AS blog_private,
+              s.user_id, n.content
          FROM shares s
          JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
         WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
@@ -243,7 +248,7 @@ filesRoutes.get('/:id', async (c) => {
       .first<{
         slug: string
         password_hash: string | null
-        blog_published: number
+        blog_private: number
         user_id: string
         content: string
       }>()
@@ -257,7 +262,7 @@ filesRoutes.get('/:id', async (c) => {
             share.slug,
             share.password_hash,
           ))) ||
-          (share.blog_published === 1 && (await blogFileAccess(c, share.user_id)))),
+          (share.blog_private === 1 && (await blogFileAccess(c, share.user_id)))),
     )
   }
   if (!allowed) throw ApiError.unauthenticated('You do not have access to this attachment')

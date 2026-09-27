@@ -35,7 +35,6 @@ interface ShareRow {
   expires_at: number | null
   views: number
   created_at: number
-  blog_published: number
 }
 
 function toShareInfo(row: ShareRow, origin: string): ShareInfo {
@@ -47,7 +46,6 @@ function toShareInfo(row: ShareRow, origin: string): ShareInfo {
     expiresAt: row.expires_at,
     views: row.views,
     createdAt: row.created_at,
-    blogPublished: Boolean(row.blog_published),
   }
 }
 
@@ -56,7 +54,7 @@ shareManageRoutes.use('*', requireAuth)
 
 shareManageRoutes.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT s.slug, s.note_id, s.user_id, s.password_hash, s.expires_at, s.blog_published, s.views, s.created_at,
+    `SELECT s.slug, s.note_id, s.user_id, s.password_hash, s.expires_at, s.views, s.created_at,
             n.title AS note_title, n.deleted_at
        FROM shares s JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
       WHERE s.user_id = ?1
@@ -84,10 +82,7 @@ shareManageRoutes.get('/:noteId', async (c) => {
 shareManageRoutes.post('/:noteId', async (c) => {
   const userId = c.get('userId')
   const noteId = c.req.param('noteId')
-  const body = await readJson<{ password?: string | null; expiresIn?: number | null; blogPublished?: boolean }>(c, JSON_BODY_LIMITS.small)
-  if (body.blogPublished !== undefined && typeof body.blogPublished !== 'boolean') {
-    throw ApiError.badRequest('blogPublished must be a boolean')
-  }
+  const body = await readJson<{ password?: string | null; expiresIn?: number | null }>(c, JSON_BODY_LIMITS.small)
 
   const note = await c.env.DB.prepare(
     `SELECT id FROM notes WHERE id = ?1 AND user_id = ?2 AND deleted_at IS NULL`,
@@ -127,12 +122,11 @@ shareManageRoutes.post('/:noteId', async (c) => {
         : null
 
   const written = await c.env.DB.prepare(
-    `INSERT INTO shares (slug, note_id, user_id, password_hash, expires_at, blog_published, views, created_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7)
+    `INSERT INTO shares (slug, note_id, user_id, password_hash, expires_at, views, created_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)
      ON CONFLICT(note_id) DO UPDATE SET
-       password_hash = CASE WHEN ?8 = 1 THEN excluded.password_hash ELSE shares.password_hash END,
-       expires_at = CASE WHEN ?9 = 1 THEN excluded.expires_at ELSE shares.expires_at END,
-       blog_published = CASE WHEN ?10 = 1 THEN excluded.blog_published ELSE shares.blog_published END
+       password_hash = CASE WHEN ?7 = 1 THEN excluded.password_hash ELSE shares.password_hash END,
+       expires_at = CASE WHEN ?8 = 1 THEN excluded.expires_at ELSE shares.expires_at END
      WHERE shares.user_id = excluded.user_id`,
   )
     .bind(
@@ -141,11 +135,9 @@ shareManageRoutes.post('/:noteId', async (c) => {
       userId,
       passwordHash,
       expiresAt,
-      body.blogPublished === true ? 1 : 0,
       Date.now(),
       replacePassword ? 1 : 0,
       body.expiresIn !== undefined ? 1 : 0,
-      body.blogPublished !== undefined ? 1 : 0,
     )
     .run()
   if (!written.meta.changes) throw new ApiError(409, 'conflict', 'Share state changed. Refresh and try again')
