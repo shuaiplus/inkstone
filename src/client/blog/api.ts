@@ -45,7 +45,7 @@ export const blogApi = {
   tag: (username: string, name: string) =>
     blogFetch<{ name: string; posts: BlogPostSummary[] }>(`/${encodeURIComponent(username)}/tags/${encodeURIComponent(name)}`),
   settings: () =>
-    blogFetch<{ hasPassword: boolean; title: string | null }>('/settings'),
+    blogFetch<{ hasCustomPassword: boolean; title: string | null }>('/settings'),
   updateSettings: (body: { password?: string | null; title?: string }) =>
     blogFetch<{ ok: true }>('/settings', { method: 'PUT', body: JSON.stringify(body) }),
 }

@@ -327,6 +327,86 @@ describe('blog routes', () => {
     expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(true)
   })
 
+  it('PUT /settings with password "" clears the custom password and auth reverts to the account password', async () => {
+    const meta: MetaStore = new Map([['blog_password_hash:u1', passwordHash]])
+    const db = makeDb({ users: { alice: 'u1' }, accountHash: passwordHash, meta })
+    const app = makeAuthedApp()
+    const res = await app.request(
+      '/settings',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: '' }),
+      },
+      env(db),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect(meta.get('blog_password_hash:u1')).toBe('')
+
+    const settings = await app.request('/settings', {}, env(db))
+    expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null })
+
+    const auth = await app.request(
+      '/alice/auth',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'secret' }),
+      },
+      env(db),
+    )
+    expect(auth.status).toBe(200)
+    expect(await auth.json()).toEqual({ ok: true })
+  })
+
+  it('PUT /settings with a non-empty password sets the custom password, old account password fails, new custom password succeeds', async () => {
+    const db = makeDb({
+      users: { alice: 'u1' },
+      accountHash: passwordHash,
+      blogPrivateNoteIds: ['n1'],
+    })
+    const app = makeAuthedApp()
+    const res = await app.request(
+      '/settings',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'newsecret' }),
+      },
+      env(db),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(true)
+
+    const settings = await app.request('/settings', {}, env(db))
+    expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null })
+
+    const oldAuth = await app.request(
+      '/alice/auth',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'secret' }),
+      },
+      env(db),
+    )
+    expect(oldAuth.status).toBe(401)
+
+    const newAuth = await app.request(
+      '/alice/auth',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'newsecret' }),
+      },
+      env(db),
+    )
+    expect(newAuth.status).toBe(200)
+    expect(await newAuth.json()).toEqual({ ok: true })
+  })
+
   it('posts/:slug returns 401 for a blog-private post without a session', async () => {
     const db = makeDb({ users: { alice: 'u1' }, postDetail: privatePostDetail() })
     const app = makeApp()

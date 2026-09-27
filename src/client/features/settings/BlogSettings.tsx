@@ -17,7 +17,7 @@ export function BlogSettings() {
   const toast = useUi((s) => s.toast)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [hasPassword, setHasPassword] = useState(false)
+  const [hasCustomPassword, setHasCustomPassword] = useState(false)
   const [title, setTitle] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<BusyAction>(null)
@@ -31,7 +31,7 @@ export function BlogSettings() {
       const settings = await blogApi.settings()
       if (mountedRef.current) {
         setTitle(settings.title ?? '')
-        setHasPassword(settings.hasPassword)
+        setHasCustomPassword(settings.hasCustomPassword)
       }
     } catch (error) {
       if (mountedRef.current) setLoadError(errorMessage(error))
@@ -92,7 +92,7 @@ export function BlogSettings() {
     try {
       await blogApi.updateSettings({ password: value })
       if (mountedRef.current) {
-        setHasPassword(true)
+        setHasCustomPassword(true)
         setPassword('')
       }
       toast({ title: t('settings.blog_password_updated'), tone: 'success' })
@@ -113,7 +113,7 @@ export function BlogSettings() {
     if (!approved || !begin('clearPassword')) return
     try {
       await blogApi.updateSettings({ password: null })
-      if (mountedRef.current) setHasPassword(false)
+      if (mountedRef.current) setHasCustomPassword(false)
       toast({ title: t('settings.blog_password_cleared'), tone: 'success' })
     } catch (error) {
       fail(error)
@@ -201,8 +201,13 @@ export function BlogSettings() {
               onKeyDown={(e) => { if (e.key === 'Enter') void setBlogPassword() }}
             />
           </Field>
+          {!hasCustomPassword && (
+            <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
+              {t('settings.blog_password_account_hint')}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-            {hasPassword && (
+            {hasCustomPassword && (
               <Button size="sm" variant="ghost" icon={<Trash2 size={13} />} className="text-[var(--danger)]" loading={busy === 'clearPassword'} disabled={busy !== null} onClick={() => void clearBlogPassword()}>
                 {t('settings.blog_clear_password')}
               </Button>
