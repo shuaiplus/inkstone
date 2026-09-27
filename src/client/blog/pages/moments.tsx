@@ -42,7 +42,7 @@ export default function MomentsPage({ username }: {
       ) : (
         data.moments.map((moment) => (
           <article key={moment.id} className="blog-card">
-            <BlogMarkdown content={moment.content} slug={moment.id} />
+            <BlogMarkdown content={moment.content} slug={moment.slug} />
             <div className="blog-card-meta">
               <time dateTime={new Date(moment.created_at).toISOString()}>{formatDate(moment.created_at)}</time>
             </div>

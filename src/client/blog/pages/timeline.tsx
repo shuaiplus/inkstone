@@ -58,7 +58,11 @@ export default function TimelinePage({ username }: {
             <h2>{year}</h2>
             {items.map((item) => (
               <article key={item.id} className="blog-card">
-                <h3 className="blog-card-title">{item.title}</h3>
+                <h3 className="blog-card-title">
+                  <a href={`/blog/${encodeURIComponent(username)}/posts/${encodeURIComponent(item.slug)}`}>
+                    {item.title}
+                  </a>
+                </h3>
                 <div className="blog-card-meta">
                   <time dateTime={new Date(item.created_at).toISOString()}>{formatDate(item.created_at)}</time>
                 </div>

@@ -102,7 +102,7 @@ export async function listBlogMoments(
   const passwordFilter = onlyPublic ? ` AND s.password_hash IS NULL` : ''
   const { results } = await db
     .prepare(
-      `SELECT n.id, n.content, n.created_at, ${TAG_SUBQUERY}
+      `SELECT n.id, n.content, n.created_at, s.slug AS slug, ${TAG_SUBQUERY}
          FROM notes n
          JOIN folders f ON f.id = n.folder_id AND f.name = 'Moments' AND f.parent_id IS NULL AND f.deleted_at IS NULL
          JOIN shares s ON s.note_id = n.id AND s.user_id = n.user_id AND s.blog_published = 1 AND (s.expires_at IS NULL OR s.expires_at > ?2)${passwordFilter}
@@ -110,11 +110,12 @@ export async function listBlogMoments(
         ORDER BY n.created_at DESC`,
     )
     .bind(userId, Date.now())
-    .all<{ id: string; content: string; created_at: number; tag_names: string | null }>()
+    .all<{ id: string; content: string; created_at: number; slug: string; tag_names: string | null }>()
   return results.map((row) => ({
     id: row.id,
     content: row.content,
     created_at: row.created_at,
+    slug: row.slug,
     tags: splitTags(row.tag_names),
   }))
 }
@@ -129,18 +130,19 @@ export async function listBlogTimeline(
   const where = `s.user_id = ?1 AND s.blog_published = 1 AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)${passwordFilter}`
   const { results } = await db
     .prepare(
-      `SELECT s.note_id AS id, n.title, s.created_at, strftime('%Y', datetime(s.created_at / 1000, 'unixepoch')) AS year
+      `SELECT s.note_id AS id, n.title, s.created_at, s.slug AS slug, strftime('%Y', datetime(s.created_at / 1000, 'unixepoch')) AS year
        ${SHARE_POST_JOIN}
         WHERE ${where}
         ORDER BY s.created_at DESC`,
     )
     .bind(userId, now)
-    .all<{ id: string; title: string; created_at: number; year: string }>()
+    .all<{ id: string; title: string; created_at: number; slug: string; year: string }>()
   return results.map((row) => ({
     id: row.id,
     title: row.title,
     created_at: row.created_at,
     year: row.year,
+    slug: row.slug,
   }))
 }
 

@@ -112,8 +112,8 @@ function mockDbWithMoments(): MockDb {
   return makeDb([
     ["'Moments'", async () => ({
       all: [
-        { id: 'moment-1', content: 'short note', created_at: 1_700_000_000_000, tag_names: null },
-        { id: 'moment-2', content: 'another one', created_at: 1_700_000_000_001, tag_names: null },
+        { id: 'moment-1', content: 'short note', created_at: 1_700_000_000_000, slug: 'moment-1-slug', tag_names: null },
+        { id: 'moment-2', content: 'another one', created_at: 1_700_000_000_001, slug: 'moment-2-slug', tag_names: null },
       ],
     })],
   ])
@@ -123,8 +123,8 @@ function mockDbWithTimeline(): MockDb {
   return makeDb([
     ["strftime('%Y'", async () => ({
       all: [
-        { id: 't-note', title: 'Timeline post', created_at: 1_700_000_000_000, year: '2026' },
-        { id: 'old-note', title: 'Older post', created_at: 1_400_000_000_000, year: '2014' },
+        { id: 't-note', title: 'Timeline post', created_at: 1_700_000_000_000, year: '2026', slug: 't-slug' },
+        { id: 'old-note', title: 'Older post', created_at: 1_400_000_000_000, year: '2014', slug: 'old-slug' },
       ],
     })],
   ])
@@ -191,6 +191,7 @@ describe('blog queries', () => {
     const moments = await listBlogMoments(db, 'u1', false)
     expect(moments.map((m) => m.id)).toEqual(['moment-1', 'moment-2'])
     expect(moments[0]?.content).toBe('short note')
+    expect(moments[0]?.slug).toBe('moment-1-slug')
     expect(hasSql(db, "'Moments'")).toBe(true)
     expect(hasSql(db, 'f.parent_id IS NULL')).toBe(true)
   })
@@ -200,6 +201,7 @@ describe('blog queries', () => {
     const items = await listBlogTimeline(db, 'u1', false)
     expect(items.map((i) => i.year)).toEqual(['2026', '2014'])
     expect(items[0]?.id).toBe('t-note')
+    expect(items[0]?.slug).toBe('t-slug')
     expect(hasSql(db, "strftime('%Y'")).toBe(true)
   })
 

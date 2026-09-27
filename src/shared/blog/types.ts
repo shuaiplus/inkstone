@@ -17,6 +17,7 @@ export interface TimelineItem {
   title: string
   created_at: number
   year: string
+  slug: string
 }
 
 export interface BlogTag {
@@ -29,6 +30,7 @@ export interface MomentItem {
   content: string
   created_at: number
   tags: string[]
+  slug: string
 }
 
 export interface BlogPostsResponse {
