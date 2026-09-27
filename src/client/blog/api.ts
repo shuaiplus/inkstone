@@ -30,6 +30,8 @@ export async function blogLogin(username: string, password: string): Promise<boo
 
 export const blogApi = {
   auth: blogLogin,
+  meta: (username: string) =>
+    blogFetch<{ username: string; title: string | null }>(`/${encodeURIComponent(username)}/meta`),
   posts: (username: string, page = 1, limit = 10) =>
     blogFetch<BlogPostsResponse>(`/${encodeURIComponent(username)}/posts?page=${page}&limit=${limit}`),
   post: (username: string, slug: string) =>

@@ -1,5 +1,5 @@
-import { Component, lazy, Suspense, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react'
-import { BlogAuthError } from './api'
+import { Component, lazy, Suspense, useEffect, useState, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react'
+import { blogApi, BlogAuthError } from './api'
 import { BlogHeader } from './components/header'
 import { BlogFooter } from './components/footer'
 import { t } from '../lib/i18n'
@@ -72,9 +72,18 @@ export default function BlogApp({ username }: {
   username: string
 }) {
   const { Component, props } = matchRoute(username)
+  const [title, setTitle] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setTitle(null)
+    blogApi.meta(username)
+      .then((meta) => { if (!cancelled) setTitle(meta.title) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [username])
   return (
     <div className="blog-app">
-      <BlogHeader username={username} />
+      <BlogHeader username={username} title={title ?? undefined} />
       <main className="blog-main">
         <AuthBoundary username={username}>
           <Suspense fallback={<div className="blog-loading">{t('blog.loading')}</div>}>

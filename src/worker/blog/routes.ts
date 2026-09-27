@@ -50,6 +50,12 @@ blogRoutes.post('/:username/auth', async (c) => {
   return c.json({ ok: true })
 })
 
+blogRoutes.get('/:username/meta', async (c) => {
+  const userId = c.get('blogOwnerId')!
+  const username = c.req.param('username')
+  return c.json({ username, title: await getBlogTitle(c.env.DB, userId) })
+})
+
 blogRoutes.use('/:username/*', blogAuthMiddleware)
 
 const publicOnly = async (c: { env: AppBindings['Bindings']; get: (k: string) => string }) =>
