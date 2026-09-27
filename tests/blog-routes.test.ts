@@ -129,7 +129,6 @@ function makeShareDb(): MockDb {
                   expires_at: null,
                   views: 0,
                   created_at: 1700000000000,
-                  blog_published: 1,
                 } as T | null
               }
               return null as T | null
@@ -430,7 +429,7 @@ describe('blog routes', () => {
     expect(await res.json()).toMatchObject({ id: 'n1', slug: 'private-post', tags: ['blog-private'] })
   })
 
-  it('share create/get responses omit blogPublished', async () => {
+  it('share get response omits blogPublished', async () => {
     const app = new Hono<AppBindings>()
     app.use('/api/share/*', async (c, next) => {
       c.set('userId', 'u1')

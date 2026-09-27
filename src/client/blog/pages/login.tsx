@@ -21,10 +21,10 @@ export default function LoginPage({ username }: {
         window.location.reload()
         return
       }
-      setError('Incorrect password. Please try again.')
+      setError(t('blog.incorrect_password'))
     }
     catch {
-      setError('Something went wrong. Please try again.')
+      setError(t('blog.something_went_wrong'))
     }
     finally {
       setBusy(false)
@@ -47,7 +47,7 @@ export default function LoginPage({ username }: {
         />
         {error && <p className="blog-login-error" role="alert">{error}</p>}
         <button type="submit" disabled={busy}>
-          {busy ? 'Unlocking…' : 'Unlock'}
+          {busy ? t('blog.unlocking') : t('blog.unlock')}
         </button>
       </form>
     </div>

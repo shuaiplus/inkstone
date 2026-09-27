@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { blogTierOfTags } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import { countText, deriveExcerpt, extractTags, normalizeLinkKey, replaceWikiLinkTarget } from '@shared/markdown-utils'
 import { duplicateNoteTitle, sliceText, truncateText, utf8ByteLength } from '@shared/text-utils'
@@ -517,7 +518,7 @@ notesRoutes.patch('/:id', async (c) => {
     throw ApiError.conflict('This note was modified elsewhere', { server: current })
   }
   if (contentChanged) {
-    await syncBlogShare(c.env.DB, userId, id, derivedTags ?? extractTags(newContent))
+    await syncBlogShare(c.env.DB, userId, id, derivedTags ?? extractTags(newContent), splitTags(row.tag_names))
   }
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
   let rewroteInbound = false
@@ -622,7 +623,9 @@ notesRoutes.delete('/:id', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
-  await withdrawBlogShare(c.env.DB, userId, id)
+  if (blogTierOfTags(splitTags(row.tag_names)) !== 'none') {
+    await withdrawBlogShare(c.env.DB, userId, id)
+  }
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
   await broadcastCursor(c, changeResult?.results?.[0]?.seq)
   scheduleFtsDrain(c)
@@ -949,7 +952,7 @@ notesRoutes.post('/:id/versions/:versionId/restore', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
-  await syncBlogShare(c.env.DB, userId, id, extractTags(version.content))
+  await syncBlogShare(c.env.DB, userId, id, extractTags(version.content), splitTags(current.tag_names))
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   scheduleFtsDrain(c)

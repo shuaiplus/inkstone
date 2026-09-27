@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderMarkdown } from '../../lib/markdown/renderer'
 import { enhancePreview, renderPendingMermaid } from '../../lib/markdown/enhance'
+import { t } from '../../lib/i18n'
 
 function addShareAccess(html: string, slug: string): string {
   const template = document.createElement('template')
@@ -12,13 +13,13 @@ function addShareAccess(html: string, slug: string): string {
     const body = embed.querySelector<HTMLElement>('.note-embed-body')
     if (body) {
       body.removeAttribute('aria-busy')
-      body.textContent = 'Embedded private notes are not included in this blog'
+      body.textContent = t('blog.embed_private_not_included')
     }
   }
   for (const task of template.content.querySelectorAll<HTMLInputElement>('input.task-list-item-checkbox')) {
     task.disabled = true
     task.removeAttribute('data-task-line')
-    task.setAttribute('aria-label', 'Tasks on this blog are read-only')
+    task.setAttribute('aria-label', t('blog.tasks_read_only'))
   }
   for (const element of template.content.querySelectorAll<HTMLImageElement | HTMLAnchorElement>('img[src], a[href]')) {
     const attr = element instanceof HTMLImageElement ? 'src' : 'href'

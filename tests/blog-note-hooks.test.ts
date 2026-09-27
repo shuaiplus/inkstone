@@ -143,7 +143,7 @@ function seedNote(overrides: Partial<NoteRow> & { id: string; content: string })
     created_at: 1700000000000,
     updated_at: 1700000000000,
     deleted_at: null,
-    tag_names: '',
+    tag_names: extractTags(overrides.content).join('\u0001'),
     ...overrides,
   }
 }
@@ -210,7 +210,7 @@ describe('blog note hooks', () => {
     expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
   })
 
-  it('PATCH to content without blog tags withdraws the blog share', async () => {
+  it('PATCH removing a blog tag withdraws the blog share', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: TAGGED_CONTENT })], accountHash: 'acct-hash' })
     const res = await patch(db, N1, 'a completely different plain note')
     expect(res.status).toBe(200)
@@ -218,12 +218,36 @@ describe('blog note hooks', () => {
     expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
   })
 
-  it('DELETE (trash) withdraws the blog share', async () => {
+  it('PATCH removing a blog-private tag withdraws the blog share', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: '---\ntags:\n  - blog-private\n---\n# Secret\n' })], accountHash: 'acct-hash' })
+    const res = await patch(db, N1, 'a plain note with no blog tags')
+    expect(res.status).toBe(200)
+    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
+    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
+  })
+
+  it('PATCH editing a never-blog-tagged note keeps manual shares (no DELETE)', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })], accountHash: 'acct-hash' })
+    const res = await patch(db, N1, '# Plain note edited\n')
+    expect(res.status).toBe(200)
+    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
+    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
+  })
+
+  it('DELETE (trash) withdraws the blog share for a blog-tagged note', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: TAGGED_CONTENT })] })
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}`, { method: 'DELETE' })
     expect(res.status).toBe(200)
     expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
+  })
+
+  it('DELETE (trash) keeps manual shares for a never-blog-tagged note', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })] })
+    const app = makeApp(db)
+    const res = await request(app, db, `/api/notes/${N1}`, { method: 'DELETE' })
+    expect(res.status).toBe(200)
+    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
   })
 
   it('RESTORE re-ensures the blog share from the restored content', async () => {

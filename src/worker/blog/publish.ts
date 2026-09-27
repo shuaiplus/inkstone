@@ -19,7 +19,7 @@ export async function ensureBlogShare(
     .bind(newSlug(), noteId, userId, tier === 'private' ? effectiveHash : null, Date.now())
     .run()
   await db
-    .prepare(`UPDATE shares SET password_hash = ? WHERE note_id = ? AND user_id = ?`)
+    .prepare(`UPDATE shares SET password_hash = ?, expires_at = NULL WHERE note_id = ? AND user_id = ?`)
     .bind(tier === 'private' ? effectiveHash : null, noteId, userId)
     .run()
 }
@@ -37,10 +37,13 @@ export async function syncBlogShare(
   userId: string,
   noteId: string,
   tags: readonly string[],
+  prevTags?: readonly string[],
 ): Promise<void> {
   const tier = blogTierOfTags(tags)
   if (tier === 'none') {
-    await withdrawBlogShare(db, userId, noteId)
+    if (prevTags !== undefined && blogTierOfTags(prevTags) !== 'none') {
+      await withdrawBlogShare(db, userId, noteId)
+    }
     return
   }
   await ensureBlogShare(db, userId, noteId, tier, await getBlogPasswordHash(db, userId))

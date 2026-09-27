@@ -201,7 +201,7 @@ export function BlogSettings() {
               onKeyDown={(e) => { if (e.key === 'Enter') void setBlogPassword() }}
             />
           </Field>
-          {!hasCustomPassword && (
+          {!password && !hasCustomPassword && (
             <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
               {t('settings.blog_password_account_hint')}
             </p>

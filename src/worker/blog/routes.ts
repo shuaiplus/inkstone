@@ -41,7 +41,7 @@ async function rehashBlogPrivateShares(db: D1Database, userId: string): Promise<
       `SELECT n.id FROM notes n
         JOIN note_tags nt ON nt.note_id = n.id
         JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
-       WHERE n.user_id = ?1 AND n.deleted_at IS NULL AND t.name = 'blog-private'`,
+       WHERE n.user_id = ?1 AND n.deleted_at IS NULL AND t.name = '${BLOG_PRIVATE_TAG}'`,
     )
     .bind(userId)
     .all<{ id: string }>()

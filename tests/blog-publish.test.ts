@@ -132,11 +132,31 @@ describe('blog publish', () => {
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
   })
 
-  it('syncBlogShare withdraws when there are no blog tags', async () => {
+  it('syncBlogShare does nothing for no blog tags and no prev tags (manual shares preserved)', async () => {
     const db = makeDb([])
     await syncBlogShare(db, 'u1', 'n1', [])
+    expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
+    expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
+  })
+
+  it('syncBlogShare does nothing for no blog tags when prev tags were never a blog article', async () => {
+    const db = makeDb([])
+    await syncBlogShare(db, 'u1', 'n1', [], ['plain'])
+    expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
+    expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
+  })
+
+  it('syncBlogShare withdraws when a blog article loses its blog tag', async () => {
+    const db = makeDb([])
+    await syncBlogShare(db, 'u1', 'n1', ['plain'], ['blog-public'])
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
+  })
+
+  it('syncBlogShare withdraws when a private blog article loses its blog tag', async () => {
+    const db = makeDb([])
+    await syncBlogShare(db, 'u1', 'n1', [], ['blog-private'])
+    expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
   })
 
   it('syncBlogShare ensures a public share for the blog-public tag', async () => {

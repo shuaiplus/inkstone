@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { mergeSettings, mergeSettingsPatch } from '@shared/constants'
+import { RESERVED_BLOG_TAGS } from '@shared/blog/tags'
 import type { UserSettings } from '@shared/types'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
@@ -62,7 +63,7 @@ settingsRoutes.get('/stats', async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT note_stats.*, attachment_stats.*,
        (SELECT COUNT(*) FROM folders WHERE user_id = ?1 AND deleted_at IS NULL) AS folders,
-       (SELECT COUNT(*) FROM tags WHERE user_id = ?1) AS tags,
+       (SELECT COUNT(*) FROM tags WHERE user_id = ?1 AND name NOT IN (?, ?)) AS tags,
        (SELECT COUNT(*) FROM note_versions WHERE user_id = ?1) AS versions,
        (SELECT COUNT(*) FROM links WHERE user_id = ?1) AS links
      FROM (
@@ -76,7 +77,7 @@ settingsRoutes.get('/stats', async (c) => {
          FROM attachments WHERE user_id = ?1
      ) attachment_stats`,
   )
-    .bind(userId)
+    .bind(userId, userId, ...RESERVED_BLOG_TAGS, userId, userId, userId, userId)
     .first<Record<string, number>>()
 
   return c.json({

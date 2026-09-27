@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { filterVisibleTags } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import type { SyncDeletion, SyncResponse } from '@shared/types'
 import type { AppBindings } from '../env'
@@ -137,7 +138,7 @@ syncRoutes.get('/', requireAuth, async (c) => {
           .all<FolderRow>(),
       )
 
-  const tags = facetsFull
+  const tags = filterVisibleTags(facetsFull
     ? (
         await c.env.DB.prepare(
           `SELECT ${TAG_SELECT} FROM tags t
@@ -153,7 +154,7 @@ syncRoutes.get('/', requireAuth, async (c) => {
         )
           .bind(userId, ...ids)
           .all<TagRow>(),
-      )
+      ))
 
   const gotNotes = new Set(notes.map((n) => n.id))
   for (const id of noteIds) if (!gotNotes.has(id)) deletions.push({ entity: 'note', id })
@@ -250,7 +251,7 @@ async function fullSnapshot(
     siteChanged: true,
     notes: pageNotes.map(toNoteSummary),
     folders: folders.results.map(toFolder),
-    tags: tags.results.map(toTag),
+    tags: filterVisibleTags(tags.results).map(toTag),
     deletions: [],
     serverTime: Date.now(),
   }
