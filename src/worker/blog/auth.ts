@@ -1,4 +1,4 @@
-import { getCookie, setCookie } from 'hono/cookie'
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import type { Context } from 'hono'
 import { getMeta, setMeta } from '../db/metadata'
@@ -10,6 +10,7 @@ export const BLOG_SESSION_PREFIX = 'blog_session:'
 export const BLOG_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 export const BLOG_PASSWORD_KEY = (userId: string): string => `blog_password_hash:${userId}`
 export const BLOG_TITLE_KEY = (userId: string): string => `blog_title:${userId}`
+export const BLOG_DESCRIPTION_KEY = (userId: string): string => `blog_description:${userId}`
 export const BLOG_SESSION_COOKIE = (userId: string): string => `blog_session_${userId}`
 
 export async function setBlogPassword(db: D1Database, userId: string, password: string): Promise<void> {
@@ -37,12 +38,31 @@ async function invalidateBlogSessions(db: D1Database, userId: string): Promise<v
     .run()
 }
 
+export async function clearBlogSession(db: D1Database, userId: string, token: string): Promise<void> {
+  await db
+    .prepare('DELETE FROM app_meta WHERE key = ?1')
+    .bind(`${BLOG_SESSION_PREFIX}${userId}:${token}`)
+    .run()
+}
+
+export function deleteBlogSessionCookie(c: Context<AppBindings>, userId: string): void {
+  deleteCookie(c, BLOG_SESSION_COOKIE(userId), { path: '/' })
+}
+
 export async function setBlogTitle(db: D1Database, userId: string, title: string): Promise<void> {
   await setMeta(db, BLOG_TITLE_KEY(userId), title)
 }
 
 export async function getBlogTitle(db: D1Database, userId: string): Promise<string | null> {
   return getMeta(db, BLOG_TITLE_KEY(userId))
+}
+
+export async function setBlogDescription(db: D1Database, userId: string, description: string): Promise<void> {
+  await setMeta(db, BLOG_DESCRIPTION_KEY(userId), description)
+}
+
+export async function getBlogDescription(db: D1Database, userId: string): Promise<string | null> {
+  return getMeta(db, BLOG_DESCRIPTION_KEY(userId))
 }
 
 export async function handleBlogAuth(

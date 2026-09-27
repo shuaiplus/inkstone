@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDown, ArrowUp, ChevronRight, Clock, CornerUpLeft, FilePlus2, FileText, FolderClosed, FolderInput, FolderOpen, FolderPlus, Hash, Inbox, LogOut, Moon, MoreHorizontal, Palette, PanelLeft, PanelLeftClose, Pencil, Plus, Settings, Star, Sun, Trash2, Waypoints, } from 'lucide-react';
-import { filterVisibleTags } from '@shared/blog/tags';
 import { LIMITS } from '@shared/constants';
 import type { Tag, ViewKind } from '@shared/types';
 import { compareTagNames } from '@shared/markdown-utils';
@@ -608,7 +607,7 @@ export function TagSection() {
     const [creating, setCreating] = useState(false);
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [appearanceId, setAppearanceId] = useState<string | null>(null);
-    const sortedTags = useMemo(() => filterVisibleTags(tags)
+    const sortedTags = useMemo(() => [...tags]
             .sort((a, b) => b.count - a.count || compareTagNames(a.name, b.name)), [tags]);
     const visible = expanded ? sortedTags : sortedTags.slice(0, 8);
     const appearanceTag = appearanceId

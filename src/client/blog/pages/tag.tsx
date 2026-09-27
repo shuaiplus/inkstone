@@ -1,4 +1,4 @@
-import { blogApi } from '../api'
+﻿import { blogApi } from '../api'
 import type { BlogPostSummary } from '@shared/blog/types'
 import { FeedCard } from '../components/feed-card'
 import LoginPage from './login'
@@ -36,7 +36,7 @@ export default function TagPage({ username, name }: {
 
   return (
     <div>
-      <h1 className="blog-page-title">{t('blog.tag')} {data.name}</h1>
+      <h1 className="blog-section-title">{t('blog.tag')} {data.name}</h1>
       {data.posts.length === 0 ? (
         <p className="blog-empty">{t('blog.no_posts_for_tag')}</p>
       ) : (

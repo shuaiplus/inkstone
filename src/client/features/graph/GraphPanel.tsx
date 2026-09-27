@@ -16,7 +16,6 @@ import {
   X,
 } from 'lucide-react'
 import type { GraphNode, GraphQuery, GraphResponse } from '@shared/types'
-import { filterVisibleTags } from '@shared/blog/tags'
 import { organizerColorOrNull } from '@shared/organizer-colors'
 import { truncateText } from '@shared/text-utils'
 import { api } from '../../lib/api'
@@ -168,7 +167,7 @@ export function GraphPanel({ onClose }: { onClose: () => void }) {
   const openNote = useNotes((state) => state.openNote)
   const createNote = useNotes((state) => state.createNote)
   const folders = useNotes((state) => state.folders ?? [])
-  const tags = filterVisibleTags(useNotes((state) => state.tags ?? []))
+  const tags = useNotes((state) => state.tags ?? [])
   const activeNoteId = useUi((state) => state.activeNoteId)
   const hoverRef = useRef<CanvasNode | null>(null)
   const selectedIdRef = useRef<string | null>(null)

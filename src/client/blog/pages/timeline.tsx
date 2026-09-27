@@ -1,31 +1,37 @@
-import { useMemo } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { blogApi } from '../api'
-import type { TimelineItem } from '@shared/blog/types'
+import type { BlogTimelineResponse, TimelineItem } from '@shared/blog/types'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
 import { t } from '../../lib/i18n'
 
-function formatDate(ts: number): string {
+function formatMonthDay(ts: number): string {
   if (!Number.isFinite(ts) || !ts)
     return ''
-  return new Date(ts).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  return new Date(ts).toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' })
 }
 
 export default function TimelinePage({ username }: {
   username: string
 }) {
-  const { status, data } = useBlogQuery<{ items: TimelineItem[] }>(
-    () => blogApi.timeline(username),
-    [username],
+  const [page, setPage] = useState(1)
+  const [items, setItems] = useState<TimelineItem[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const { status, data } = useBlogQuery<BlogTimelineResponse>(
+    () => blogApi.timeline(username, page),
+    [username, page],
   )
+
+  useEffect(() => {
+    if (!data || data.page !== page)
+      return
+    setItems((prev) => (page === 1 ? data.items : [...prev, ...data.items]))
+    setHasMore(data.hasMore)
+  }, [data, page])
 
   const byYear = useMemo(() => {
     const groups = new Map<string, TimelineItem[]>()
-    for (const item of data?.items ?? []) {
+    for (const item of items) {
       const year = String(item.year ?? new Date(item.created_at).getFullYear())
       const list = groups.get(year)
       if (list)
@@ -34,11 +40,11 @@ export default function TimelinePage({ username }: {
         groups.set(year, [item])
     }
     return [...groups.entries()].sort((a, b) => b[0].localeCompare(a[0]))
-  }, [data])
+  }, [items])
 
   if (status === 'auth')
     return <LoginPage username={username} />
-  if (status === 'loading')
+  if (page === 1 && (status === 'loading' || !data))
     return <div className="blog-loading">{t('blog.loading')}</div>
   if (status === 'error' || !data)
     return (
@@ -47,29 +53,37 @@ export default function TimelinePage({ username }: {
       </div>
     )
 
+  const loadingMore = status === 'loading' && page > 1
+  const base = `/blog/` + encodeURIComponent(username)
+
   return (
     <div>
-      <h1 className="blog-page-title">{t('blog.timeline')}</h1>
-      {data.items.length === 0 ? (
+      <h1 className="blog-section-title">{t('blog.timeline')}</h1>
+      {items.length === 0 ? (
         <p className="blog-empty">{t('blog.no_timeline')}</p>
       ) : (
-        byYear.map(([year, items]) => (
-          <section key={year}>
-            <h2>{year}</h2>
-            {items.map((item) => (
-              <article key={item.id} className="blog-card">
-                <h3 className="blog-card-title">
-                  <a href={`/blog/${encodeURIComponent(username)}/posts/${encodeURIComponent(item.slug)}`}>
-                    {item.title}
+        byYear.map(([year, yearItems]) => (
+          <section key={year} className="blog-timeline-group">
+            <h2 className="blog-timeline-year">{year}</h2>
+            <ul className="blog-timeline-list">
+              {yearItems.map((item) => (
+                <li key={item.id} className="blog-timeline-row">
+                  <a href={`${base}/posts/${encodeURIComponent(item.slug)}`}>
+                    <span className="blog-timeline-date">{formatMonthDay(item.created_at)}</span>
+                    <span className="blog-timeline-title">{item.title}</span>
                   </a>
-                </h3>
-                <div className="blog-card-meta">
-                  <time dateTime={new Date(item.created_at).toISOString()}>{formatDate(item.created_at)}</time>
-                </div>
-              </article>
-            ))}
+                </li>
+              ))}
+            </ul>
           </section>
         ))
+      )}
+      {hasMore && (
+        <div className="blog-load-more">
+          <button type="button" disabled={loadingMore} onClick={() => setPage((p) => p + 1)}>
+            {loadingMore ? t('blog.loading') : t('blog.load_more')}
+          </button>
+        </div>
       )}
     </div>
   )

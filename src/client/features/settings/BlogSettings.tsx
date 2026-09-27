@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { KeyRound, RefreshCw, Rss, Trash2, Type } from 'lucide-react'
+import { KeyRound, RefreshCw, Rss, Trash2 } from 'lucide-react'
 import { LIMITS } from '@shared/constants'
 import { blogApi } from '../../blog/api'
 import { Button } from '../../components/primitives'
-import { Field, Input } from '../../components/form'
+import { Input } from '../../components/form'
 import { confirm } from '../../components/overlay'
 import { SettingsLoading as LoadingBlock } from './SettingsLoading'
 import { useSession } from '../../store/session'
 import { useUi } from '../../store/ui'
 import { t } from '../../lib/i18n'
 
-type BusyAction = 'title' | 'setPassword' | 'clearPassword' | null
+type BusyAction = 'title' | 'description' | 'setPassword' | 'clearPassword' | null
 
 export function BlogSettings() {
   const username = useSession((s) => s.user?.username)
@@ -19,6 +19,7 @@ export function BlogSettings() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [hasCustomPassword, setHasCustomPassword] = useState(false)
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<BusyAction>(null)
   const mountedRef = useRef(true)
@@ -31,6 +32,7 @@ export function BlogSettings() {
       const settings = await blogApi.settings()
       if (mountedRef.current) {
         setTitle(settings.title ?? '')
+        setDescription(settings.description ?? '')
         setHasCustomPassword(settings.hasCustomPassword)
       }
     } catch (error) {
@@ -75,6 +77,20 @@ export function BlogSettings() {
       await blogApi.updateSettings({ title: next })
       if (mountedRef.current) setTitle(next)
       toast({ title: t('settings.blog_title_saved'), tone: 'success' })
+    } catch (error) {
+      fail(error)
+    } finally {
+      finish()
+    }
+  }
+
+  const saveDescription = async () => {
+    if (!begin('description')) return
+    const next = description.trim()
+    try {
+      await blogApi.updateSettings({ description: next })
+      if (mountedRef.current) setDescription(next)
+      toast({ title: t('settings.blog_description_saved'), tone: 'success' })
     } catch (error) {
       fail(error)
     } finally {
@@ -137,38 +153,27 @@ export function BlogSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-base)]">
-        <div className="flex items-start gap-3 p-4">
-          <span className="mt-0.5 rounded-[var(--r-md)] bg-[var(--accent-soft)] p-2 text-[var(--accent)]">
-            <Rss size={18} />
+    <div className="space-y-4">
+      <section className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4">
+        <div className="flex items-center gap-3">
+          <span className="rounded-[var(--r-md)] bg-[var(--accent-soft)] p-2 text-[var(--accent)]">
+            <Rss size={16} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="text-[13.5px] font-semibold text-[var(--text-primary)]">{t('settings.blog')}</h3>
-            <p className="mt-1 text-[11.5px] leading-relaxed text-[var(--text-tertiary)]">
-              {t('settings.blog_intro')}
-            </p>
+            <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">{t('settings.blog')}</h3>
+            {blogUrl && (
+              <a href={blogUrl} className="text-[11.5px] text-[var(--accent)] hover:underline" target="_blank" rel="noreferrer">
+                {blogUrl}
+              </a>
+            )}
           </div>
         </div>
-        {blogUrl && (
-          <div className="border-t border-[var(--border-subtle)] px-4 py-3">
-            <div className="mb-1 text-[11px] font-medium text-[var(--text-tertiary)]">{t('settings.blog_url')}</div>
-            <code className="block min-w-0 overflow-x-auto rounded-[var(--r-sm)] bg-[var(--bg-inset)] px-2.5 py-2 text-[11.5px] text-[var(--text-secondary)]">
-              {blogUrl}
-            </code>
-            <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
-              {t('settings.blog_url_desc')}
-            </p>
-          </div>
-        )}
       </section>
 
-      <section>
-        <h3 className="mb-1 px-1 text-[11px] font-semibold tracking-[0.06em] text-[var(--text-quaternary)]">
-          {t('settings.blog_title')}
-        </h3>
-        <div className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4">
-          <Field label={t('settings.blog_title')} hint={t('settings.blog_title_desc')}>
+      <div className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4 space-y-4">
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-[var(--text-tertiary)]">{t('settings.blog_title')}</label>
+          <div className="flex gap-2">
             <Input
               value={title}
               maxLength={120}
@@ -176,48 +181,56 @@ export function BlogSettings() {
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') void saveTitle() }}
             />
-          </Field>
-          <div className="mt-3 flex justify-end">
-            <Button size="sm" variant="secondary" icon={<Type size={13} />} loading={busy === 'title'} disabled={busy !== null} onClick={() => void saveTitle()}>
+            <Button size="sm" variant="secondary" loading={busy === 'title'} disabled={busy !== null} onClick={() => void saveTitle()}>
               {t('common.save')}
             </Button>
           </div>
         </div>
-      </section>
-
-      <section>
-        <h3 className="mb-1 px-1 text-[11px] font-semibold tracking-[0.06em] text-[var(--text-quaternary)]">
-          {t('settings.blog_password')}
-        </h3>
-        <div className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4">
-          <Field label={t('settings.blog_password')} hint={t('settings.blog_password_desc')}>
-            <Input
-              type="password"
-              value={password}
-              maxLength={LIMITS.passwordMaxLength}
-              autoComplete="new-password"
-              placeholder={t('settings.blog_password_placeholder')}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void setBlogPassword() }}
-            />
-          </Field>
-          {!password && !hasCustomPassword && (
-            <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
-              {t('settings.blog_password_account_hint')}
-            </p>
-          )}
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-            {hasCustomPassword && (
-              <Button size="sm" variant="ghost" icon={<Trash2 size={13} />} className="text-[var(--danger)]" loading={busy === 'clearPassword'} disabled={busy !== null} onClick={() => void clearBlogPassword()}>
-                {t('settings.blog_clear_password')}
-              </Button>
-            )}
-            <Button size="sm" variant="secondary" icon={<KeyRound size={13} />} loading={busy === 'setPassword'} disabled={busy !== null} onClick={() => void setBlogPassword()}>
-              {t('settings.blog_set_password')}
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-[var(--text-tertiary)]">{t('settings.blog_description')}</label>
+          <textarea
+            className="w-full resize-y rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+            rows={2}
+            maxLength={300}
+            value={description}
+            placeholder={t('settings.blog_description_placeholder')}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+          <div className="mt-2 flex justify-end">
+            <Button size="sm" variant="secondary" loading={busy === 'description'} disabled={busy !== null} onClick={() => void saveDescription()}>
+              {t('common.save')}
             </Button>
           </div>
         </div>
-      </section>
+      </div>
+
+      <div className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4">
+        <label className="mb-1 block text-[11px] font-medium text-[var(--text-tertiary)]">{t('settings.blog_password')}</label>
+        <Input
+          type="password"
+          value={password}
+          maxLength={LIMITS.passwordMaxLength}
+          autoComplete="new-password"
+          placeholder={t('settings.blog_password_placeholder')}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void setBlogPassword() }}
+        />
+        {!password && !hasCustomPassword && (
+          <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
+            {t('settings.blog_password_account_hint')}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          {hasCustomPassword && (
+            <Button size="sm" variant="ghost" icon={<Trash2 size={13} />} className="text-[var(--danger)]" loading={busy === 'clearPassword'} disabled={busy !== null} onClick={() => void clearBlogPassword()}>
+              {t('settings.blog_clear_password')}
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" icon={<KeyRound size={13} />} loading={busy === 'setPassword'} disabled={busy !== null} onClick={() => void setBlogPassword()}>
+            {t('settings.blog_set_password')}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

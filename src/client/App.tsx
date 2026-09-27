@@ -22,7 +22,7 @@ export function App() {
   useLocale()
   const status = useSession((s) => s.status)
   const load = useSession((s) => s.load)
-  const [blogUsername] = useState(() => {
+  const [blogUsername, setBlogUsername] = useState<string | null>(() => {
     const match = /^\/blog\/([A-Za-z0-9_-]+)/.exec(location.pathname)
     return match?.[1] ?? null
   })
@@ -30,6 +30,23 @@ export function App() {
     const match = /^\/s\/([A-Za-z0-9_-]+)/.exec(location.pathname)
     return match?.[1] ?? null
   })
+
+  useEffect(() => {
+    if (blogUsername) return
+    const isBlogRoot = /^\/blog\/?$/.test(location.pathname)
+    if (!isBlogRoot) return
+    let cancelled = false
+    fetch('/api/blog/owner', { headers: { 'X-Inkstone-Client': '1' } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.username) return
+        const target = `/blog/${encodeURIComponent(data.username)}`
+        window.history.replaceState(null, '', target)
+        setBlogUsername(data.username)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [blogUsername])
 
   useEffect(() => {
     if (shareSlug || blogUsername) return
@@ -56,6 +73,8 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [shareSlug, blogUsername])
 
+  const isBlogRoot = /^\/blog\/?$/.test(location.pathname)
+
   if (blogUsername) {
     return (
       <>
@@ -64,6 +83,15 @@ export function App() {
             <BlogApp username={blogUsername} />
           </Suspense>
         </ErrorBoundary>
+        <Toaster />
+      </>
+    )
+  }
+
+  if (isBlogRoot) {
+    return (
+      <>
+        <PageFallback />
         <Toaster />
       </>
     )

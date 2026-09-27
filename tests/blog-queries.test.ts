@@ -8,6 +8,7 @@ import {
   listBlogTimeline,
   listPostsByTag,
   getBlogPost,
+  getAdjacentPosts,
 } from '../src/worker/blog/queries'
 
 interface MockRow {
@@ -67,6 +68,7 @@ const post = (overrides: Partial<MockRow> = {}): MockRow => ({
   updated_at: 1_700_000_000_000,
   slug: 'my-slug',
   tag_names: null,
+  content: '',
   ...overrides,
 })
 
@@ -110,7 +112,7 @@ function mockDbWithPassword(): MockDb {
 
 function mockDbWithMoments(): MockDb {
   return makeDb([
-    ["'Moments'", async () => ({
+    ['JOIN folders f ON f.id = n.folder_id', async () => ({
       all: [
         { id: 'moment-1', content: 'short note', created_at: 1_700_000_000_000, slug: 'moment-1-slug', tag_names: null },
         { id: 'moment-2', content: 'another one', created_at: 1_700_000_000_001, slug: 'moment-2-slug', tag_names: null },
@@ -147,6 +149,13 @@ function mockDbWithPostsByTag(): MockDb {
   ])
 }
 
+function mockDbWithAdjacent(): MockDb {
+  return makeDb([
+    ['s.note_id < ?4', async () => ({ first: { title: 'Older post', slug: 'older' } })],
+    ['s.note_id > ?4', async () => ({ first: { title: 'Newer post', slug: 'newer' } })],
+  ])
+}
+
 describe('blog queries', () => {
   it('getBlogOwner returns null for unknown username', async () => {
     expect(await getBlogOwner(mockDb(), 'nobody')).toBeNull()
@@ -163,6 +172,13 @@ describe('blog queries', () => {
     expect(posts.posts.map((p) => p.id)).not.toContain('expired-note')
     expect(hasSql(db, 'n.deleted_at IS NULL')).toBe(true)
     expect(hasSql(db, '(s.expires_at IS NULL OR s.expires_at > ?2)')).toBe(true)
+  })
+
+  it('listBlogPosts excludes Moments-folder notes', async () => {
+    const db = mockDbWithExpiredShare()
+    await listBlogPosts(db, 'u1', 'all', 1, 10)
+    expect(hasSql(db, "f2.name = 'Moments'")).toBe(true)
+    expect(hasSql(db, 'f2.parent_id IS NULL')).toBe(true)
   })
 
   it('listBlogPosts excludes soft-deleted notes', async () => {
@@ -193,22 +209,48 @@ describe('blog queries', () => {
     expect(await getBlogPost(mockDb(), 'u1', 'missing', 'all')).toBeNull()
   })
 
+  it('getAdjacentPosts returns previous (older) and next (newer) posts', async () => {
+    const db = mockDbWithAdjacent()
+    const adjacent = await getAdjacentPosts(db, 'u1', 'all', 1_700_000_000_000, 'n1')
+    expect(adjacent.previous).toEqual({ title: 'Older post', slug: 'older' })
+    expect(adjacent.next).toEqual({ title: 'Newer post', slug: 'newer' })
+    expect(hasSql(db, 's.created_at < ?3')).toBe(true)
+    expect(hasSql(db, 's.created_at > ?3')).toBe(true)
+    expect(hasSql(db, 'ORDER BY s.created_at DESC, s.note_id DESC')).toBe(true)
+    expect(hasSql(db, 'ORDER BY s.created_at ASC, s.note_id ASC')).toBe(true)
+  })
+
+  it('getAdjacentPosts returns nulls when there are no neighbors', async () => {
+    const adjacent = await getAdjacentPosts(mockDb(), 'u1', 'all', 1_700_000_000_000, 'n1')
+    expect(adjacent).toEqual({ previous: null, next: null })
+  })
+
   it('listBlogMoments returns moments from the root Moments folder', async () => {
     const db = mockDbWithMoments()
-    const moments = await listBlogMoments(db, 'u1', 'all')
-    expect(moments.map((m) => m.id)).toEqual(['moment-1', 'moment-2'])
-    expect(moments[0]?.content).toBe('short note')
-    expect(moments[0]?.slug).toBe('moment-1-slug')
-    expect(hasSql(db, "'Moments'")).toBe(true)
+    const moments = await listBlogMoments(db, 'u1', 'all', 1, 20)
+    expect(moments.moments.map((m) => m.id)).toEqual(['moment-1', 'moment-2'])
+    expect(moments.moments[0]?.content).toBe('short note')
+    expect(moments.moments[0]?.slug).toBe('moment-1-slug')
+    expect(moments.page).toBe(1)
+    expect(moments.hasMore).toBe(false)
+    expect(hasSql(db, 'f.name = ?3')).toBe(true)
     expect(hasSql(db, 'f.parent_id IS NULL')).toBe(true)
+    expect(hasSql(db, "t2.name = 'blog-public'")).toBe(false)
+  })
+
+  it('listBlogMoments gates implicit-private moments behind the blog session', async () => {
+    const db = mockDbWithMoments()
+    await listBlogMoments(db, 'u1', 'public', 1, 20)
+    expect(hasSql(db, "t2.name = 'blog-public'")).toBe(true)
   })
 
   it('listBlogTimeline returns items with a year field', async () => {
     const db = mockDbWithTimeline()
-    const items = await listBlogTimeline(db, 'u1', 'all')
-    expect(items.map((i) => i.year)).toEqual(['2026', '2014'])
-    expect(items[0]?.id).toBe('t-note')
-    expect(items[0]?.slug).toBe('t-slug')
+    const items = await listBlogTimeline(db, 'u1', 'all', 1, 20)
+    expect(items.items.map((i) => i.year)).toEqual(['2026', '2014'])
+    expect(items.items[0]?.id).toBe('t-note')
+    expect(items.items[0]?.slug).toBe('t-slug')
+    expect(items.hasMore).toBe(false)
     expect(hasSql(db, "strftime('%Y'")).toBe(true)
   })
 

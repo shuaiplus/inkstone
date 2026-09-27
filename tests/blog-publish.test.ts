@@ -4,6 +4,7 @@ import {
   withdrawBlogShare,
   syncBlogShare,
   getBlogPasswordHash,
+  reconcileMomentsShares,
 } from '../src/worker/blog/publish'
 
 interface MockRow {
@@ -141,22 +142,51 @@ describe('blog publish', () => {
 
   it('syncBlogShare does nothing for no blog tags when prev tags were never a blog article', async () => {
     const db = makeDb([])
-    await syncBlogShare(db, 'u1', 'n1', [], ['plain'])
+    await syncBlogShare(db, 'u1', 'n1', [], { prevTier: 'none' })
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
   })
 
   it('syncBlogShare withdraws when a blog article loses its blog tag', async () => {
     const db = makeDb([])
-    await syncBlogShare(db, 'u1', 'n1', ['plain'], ['blog-public'])
+    await syncBlogShare(db, 'u1', 'n1', ['plain'], { prevTier: 'public' })
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
   })
 
   it('syncBlogShare withdraws when a private blog article loses its blog tag', async () => {
     const db = makeDb([])
-    await syncBlogShare(db, 'u1', 'n1', [], ['blog-private'])
+    await syncBlogShare(db, 'u1', 'n1', [], { prevTier: 'private' })
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
+  })
+
+  it('syncBlogShare treats a Moments-folder note as blog-private without any blog tag', async () => {
+    const db = publishMockDb({ accountHash: 'acct-hash' })
+    await syncBlogShare(db, 'u1', 'n1', [], { inMoments: true })
+    expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(true)
+    expect(argsFor(db, 'UPDATE shares SET password_hash')[0]![0]).toBe('acct-hash')
+  })
+
+  it('syncBlogShare withdraws when a Moments-folder note leaves the folder', async () => {
+    const db = makeDb([])
+    await syncBlogShare(db, 'u1', 'n1', [], { inMoments: false, prevTier: 'private' })
+    expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
+    expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
+  })
+
+  it('reconcileMomentsShares creates private shares for existing Moments-folder notes', async () => {
+    const db = makeDb([
+      ['app_meta', async () => ({ first: null })],
+      ['SELECT DISTINCT n.user_id', async () => ({ all: [{ user_id: 'u1' }] })],
+      ['SELECT n.id AS id FROM notes', async () => ({ all: [{ id: 'n1' }] })],
+      ['FROM users', async () => ({ first: { password_hash: 'acct-hash' } })],
+    ])
+    await reconcileMomentsShares(db)
+    expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(true)
+    const insertArgs = argsFor(db, 'INSERT OR IGNORE INTO shares')[0]!
+    expect(insertArgs[1]).toBe('n1')
+    expect(insertArgs[2]).toBe('u1')
+    expect(insertArgs[3]).toBe('acct-hash')
   })
 
   it('syncBlogShare ensures a public share for the blog-public tag', async () => {

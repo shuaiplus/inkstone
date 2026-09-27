@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeAll, beforeEach } from 'vitest'
-import { blogAuthMiddleware, handleBlogAuth, validateBlogSession } from '../src/worker/blog/auth'
+import { blogAuthMiddleware, handleBlogAuth, validateBlogSession, clearBlogSession } from '../src/worker/blog/auth'
 import { hashPassword } from '../src/worker/lib/password'
 
 interface MockStatement {
@@ -68,6 +68,9 @@ function makeMetaDb(store: MetaStore, options: MetaDbOptions = {}): MockDb {
                 return (value === undefined ? null : { value }) as T | null
               },
               async run() {
+                if (sql.includes('DELETE FROM app_meta')) {
+                  store.delete(String(args[0]))
+                }
                 return { success: true }
               },
             }
@@ -155,6 +158,16 @@ describe('blog auth', () => {
   it('rejects an expired token', async () => {
     const db = makeMetaDb(new Map([['blog_session:u1:old', String(Date.now() - 1000)]]))
     expect(await validateBlogSession(db, 'u1', 'old')).toBe(false)
+  })
+
+  it('clearBlogSession deletes only the given session token', async () => {
+    const store: MetaStore = new Map([
+      ['blog_session:u1:tokA', String(Date.now() + 60_000)],
+      ['blog_session:u1:tokB', String(Date.now() + 60_000)],
+    ])
+    await clearBlogSession(makeMetaDb(store), 'u1', 'tokA')
+    expect(store.has('blog_session:u1:tokA')).toBe(false)
+    expect(store.has('blog_session:u1:tokB')).toBe(true)
   })
 
   it('blogAuthMiddleware sets blogAuthed=false for a bogus session cookie and continues', async () => {

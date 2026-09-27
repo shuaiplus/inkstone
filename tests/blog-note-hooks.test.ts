@@ -61,6 +61,12 @@ function makeDb(options: DbOptions = {}) {
                 const row = notes.get(String(args[0]))
                 return (row ?? null) as T | null
               }
+              if (sql.includes('SELECT id FROM folders WHERE id = ?1')) {
+                return (String(args[0]) === 'moments-folder' ? { id: 'moments-folder' } : null) as T | null
+              }
+              if (sql.includes('SELECT 1 AS found FROM folders f')) {
+                return (String(args[0]) === 'moments-folder' ? { found: 1 } : null) as T | null
+              }
               if (sql.includes('SELECT value FROM app_meta')) {
                 const key = String(args[0])
                 const value = key.startsWith('blog_password_hash:') ? options.customHash : undefined
@@ -200,6 +206,45 @@ describe('blog note hooks', () => {
     })
     expect(res.status).toBe(201)
     expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+  })
+
+  it('CREATE in the Moments folder ensures a private blog share without any tag', async () => {
+    const db = makeDb({ accountHash: 'acct-hash' })
+    const app = makeApp(db)
+    const res = await request(app, db, '/api/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: N1, folderId: 'moments-folder', content: UNTAGGED_CONTENT }),
+    })
+    expect(res.status).toBe(201)
+    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+    const updateIndex = db.preparedSqls.findIndex((sql) => sql.includes('UPDATE shares SET password_hash'))
+    expect(db.preparedArgs[updateIndex]?.[0]).toBe('acct-hash')
+  })
+
+  it('PATCH moving a plain note into the Moments folder creates a private blog share', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })], accountHash: 'acct-hash' })
+    const app = makeApp(db)
+    const res = await request(app, db, `/api/notes/${N1}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rev: 1, folderId: 'moments-folder' }),
+    })
+    expect(res.status).toBe(200)
+    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+  })
+
+  it('PATCH moving a Moments note out of the folder withdraws the blog share', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT, folder_id: 'moments-folder' })], accountHash: 'acct-hash' })
+    const app = makeApp(db)
+    const res = await request(app, db, `/api/notes/${N1}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rev: 1, folderId: null }),
+    })
+    expect(res.status).toBe(200)
+    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
+    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
   })
 
   it('PATCH to blog-public content ensures a blog share', async () => {

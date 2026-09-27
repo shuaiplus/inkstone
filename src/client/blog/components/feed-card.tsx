@@ -1,14 +1,12 @@
 import type { BlogPostSummary } from '@shared/blog/types'
-import { isReservedBlogTag } from '@shared/blog/tags'
+import { coverSrc } from '../cover'
 
 function formatDate(ts: number): string {
   if (!Number.isFinite(ts) || !ts)
     return ''
-  return new Date(ts).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 export function FeedCard({ post, username }: {
@@ -16,18 +14,25 @@ export function FeedCard({ post, username }: {
   username: string
 }) {
   const base = `/blog/${encodeURIComponent(username)}`
+  const cover = coverSrc(post)
+  const href = `${base}/posts/${encodeURIComponent(post.slug)}`
   return (
     <article className="blog-card">
-      <h2 className="blog-card-title">
-        <a href={`${base}/posts/${encodeURIComponent(post.slug)}`}>{post.title}</a>
-      </h2>
-      {post.excerpt && <p className="blog-card-excerpt">{post.excerpt}</p>}
-      <div className="blog-card-meta">
-        <time dateTime={new Date(post.created_at).toISOString()}>{formatDate(post.created_at)}</time>
-      </div>
-      {post.tags.some((tag) => !isReservedBlogTag(tag)) && (
+      <a className="blog-card-link" href={href} aria-label={post.title}>
+        {cover && (
+          <div className="blog-card-cover" aria-hidden>
+            <img src={cover} alt="" loading="lazy" />
+          </div>
+        )}
+        <h2 className="blog-card-title">{post.title}</h2>
+        {post.excerpt && <p className="blog-card-excerpt">{post.excerpt}</p>}
+        <div className="blog-card-meta">
+          <time dateTime={new Date(post.created_at).toISOString()}>{formatDate(post.created_at)}</time>
+        </div>
+      </a>
+      {post.tags.length > 0 && (
         <div className="blog-card-tags">
-          {post.tags.filter((tag) => !isReservedBlogTag(tag)).map((tag) => (
+          {post.tags.map((tag) => (
             <a key={tag} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag)}`}>
               {tag}
             </a>

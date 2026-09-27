@@ -445,6 +445,38 @@ export function extractWikiLinks(content: string): WikiLink[] {
 const ATTACHMENT_REFERENCE_RE =
   /(?:^|[\s(<"'=])\/api\/files\/([0-9a-hjkmnp-tv-z]{26})(?=$|[\s>)\]"'?#])/g
 
+const INLINE_IMAGE_RE = /!\[[^\]]*\]\(\s*([^()\s]+)(?:\s+"[^"]*")?\s*\)/g
+const REF_IMAGE_DEF_RE = /^[ \t]{0,3}\[([^\]]+)\]:[ \t]+(\S+)/gm
+const REF_IMAGE_USE_RE = /!\[[^\]]*\]\[([^\]]+)\]/g
+
+
+/**
+ * Returns the destination of the first image in the markdown body, ignoring
+ * front matter and code blocks. Handles inline images (with optional
+ * `<...>` URL brackets and an optional title), plus reference-style images
+ * defined elsewhere in the document. Returns null when there is no image.
+ */
+export function firstImageSrc(content: string): string | null {
+  const body = splitFrontMatter(content).body
+  const stripped = stripCodeRegions(body)
+  for (const match of stripped.matchAll(INLINE_IMAGE_RE)) {
+    const url = match[1]!.trim()
+    if (!url)
+      continue
+    return url.startsWith('<') && url.endsWith('>') ? url.slice(1, -1) : url
+  }
+  const definitions = new Map<string, string>()
+  for (const match of stripped.matchAll(REF_IMAGE_DEF_RE)) {
+    definitions.set(match[1]!.trim().toLowerCase(), match[2]!.trim())
+  }
+  for (const match of stripped.matchAll(REF_IMAGE_USE_RE)) {
+    const url = definitions.get(match[1]!.trim().toLowerCase())
+    if (url)
+      return url
+  }
+  return null
+}
+
 
 export function extractAttachmentIds(content: string): string[] {
   const body = splitFrontMatter(content).body

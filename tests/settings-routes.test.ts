@@ -60,7 +60,7 @@ function makeApp(db: MockDb) {
 }
 
 describe('settings routes', () => {
-  it('GET /stats binds only the user id plus the two reserved blog tag names', async () => {
+  it('GET /stats counts all tags including reserved blog tags', async () => {
     const db = makeDb()
     const app = makeApp(db)
     const res = await app.request('/stats', {}, env(db))
@@ -68,7 +68,7 @@ describe('settings routes', () => {
     expect(await res.json()).toMatchObject({ tags: 5 })
     const stats = db.prepared.find((entry) => entry.sql.includes('FROM tags'))
     expect(stats).toBeDefined()
-    expect(stats!.sql).toContain('name NOT IN (?, ?)')
-    expect(stats!.args).toEqual(['u1', 'blog-public', 'blog-private'])
+    expect(stats!.sql).toContain('COUNT(*) FROM tags WHERE user_id = ?1')
+    expect(stats!.args).toEqual(['u1'])
   })
 })

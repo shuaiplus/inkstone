@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { filterVisibleTags } from '@shared/blog/tags'
+import { isReservedBlogTag } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import { countText, deriveExcerpt, replaceTagInContent } from '@shared/markdown-utils'
 import { organizerColorOrNull } from '@shared/organizer-colors'
@@ -30,7 +30,7 @@ tagsRoutes.get('/', async (c) => {
   )
     .bind(c.get('userId'))
     .all<TagRow>()
-  return c.json({ tags: filterVisibleTags(results.map(toTag)) })
+  return c.json({ tags: results.map(toTag) })
 })
 
 tagsRoutes.post('/', async (c) => {
@@ -110,6 +110,9 @@ tagsRoutes.patch('/:id', async (c) => {
     if (/[\s#]/.test(next)) throw ApiError.badRequest('Tag names cannot contain spaces or #')
 
     if (next !== tag.name) {
+      if (isReservedBlogTag(tag.name) || isReservedBlogTag(next)) {
+        throw ApiError.forbidden('Reserved blog tags cannot be renamed')
+      }
       const existing = await c.env.DB.prepare(
         `SELECT id, name FROM tags
           WHERE user_id = ?1 AND id <> ?2 AND name = ?3 COLLATE NOCASE
@@ -242,6 +245,7 @@ tagsRoutes.delete('/:id', async (c) => {
     .bind(id, userId)
     .first<{ id: string; name: string }>()
   if (!tag) throw ApiError.notFound('Tag not found')
+  if (isReservedBlogTag(tag.name)) throw ApiError.forbidden('Reserved blog tags cannot be deleted')
 
   const rewrite = await rewriteTagInNotes(c.env, c.get('database').ftsEnabled, userId, id, tag.name, null)
 

@@ -6,10 +6,18 @@ export interface BlogPostSummary {
   updated_at: number
   tags: string[]
   slug: string
+  cover: string | null
+}
+
+export interface AdjacentPost {
+  title: string
+  slug: string
 }
 
 export interface BlogPostDetail extends BlogPostSummary {
   content: string
+  previous: AdjacentPost | null
+  next: AdjacentPost | null
 }
 
 export interface TimelineItem {
@@ -35,6 +43,19 @@ export interface MomentItem {
 
 export interface BlogPostsResponse {
   posts: BlogPostSummary[]
+  page: number
+  hasMore: boolean
+  totalPages: number
+}
+
+export interface BlogTimelineResponse {
+  items: TimelineItem[]
+  page: number
+  hasMore: boolean
+}
+
+export interface BlogMomentsResponse {
+  moments: MomentItem[]
   page: number
   hasMore: boolean
 }

@@ -1,6 +1,7 @@
 /** Defines the idempotent final D1 schema initialized by every Worker isolate. */
 import type { DatabaseState, Env } from '../env'
 import { getMeta, setMeta } from './metadata'
+import { reconcileMomentsShares } from '../blog/publish'
 
 
 export const SCHEMA_STATEMENTS: readonly string[] = [
@@ -666,7 +667,10 @@ export function initializeDatabase(env: Env): Promise<DatabaseState> {
   const existing = initializationCache.get(env.DB)
   if (existing) return existing
 
-  const pending = createSchema(env.DB).catch((error) => {
+  const pending = createSchema(env.DB).then(async (state) => {
+    await reconcileMomentsShares(env.DB)
+    return state
+  }).catch((error) => {
     initializationCache.delete(env.DB)
     throw error
   })

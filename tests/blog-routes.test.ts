@@ -221,7 +221,7 @@ describe('blog routes', () => {
     const app = makeApp()
     const res = await app.request('/alice/posts', {}, env(makeDb({ users: { alice: 'u1' }, meta })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ posts: [], page: 1, hasMore: false })
+    expect(await res.json()).toEqual({ posts: [], page: 1, hasMore: false, totalPages: 0 })
   })
 
   it('anonymous /posts serves the public tier', async () => {
@@ -259,14 +259,52 @@ describe('blog routes', () => {
       env(makeDb({ users: { alice: 'u1' }, meta })),
     )
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ posts: [], page: 1, hasMore: false })
+    expect(await res.json()).toEqual({ posts: [], page: 1, hasMore: false, totalPages: 0 })
   })
 
   it('returns 200 for a public blog without any cookie', async () => {
     const app = makeApp()
     const res = await app.request('/alice/posts', {}, env(makeDb({ users: { alice: 'u1' } })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ posts: [], page: 1, hasMore: false })
+    expect(await res.json()).toEqual({ posts: [], page: 1, hasMore: false, totalPages: 0 })
+  })
+
+  it('GET /:username/session reports anonymous without a session cookie', async () => {
+    const app = makeApp()
+    const res = await app.request('/alice/session', {}, env(makeDb({ users: { alice: 'u1' } })))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ authed: false })
+  })
+
+  it('GET /:username/session reports authed with a valid session cookie', async () => {
+    const meta: MetaStore = new Map([['blog_session:u1:tok123', String(Date.now() + 60_000)]])
+    const app = makeApp()
+    const res = await app.request(
+      '/alice/session',
+      { headers: { Cookie: 'blog_session_u1=tok123' } },
+      env(makeDb({ users: { alice: 'u1' }, meta })),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ authed: true })
+  })
+
+  it('POST /:username/logout clears the blog session and cookie', async () => {
+    const meta: MetaStore = new Map([['blog_session:u1:tok123', String(Date.now() + 60_000)]])
+    const app = makeApp()
+    const res = await app.request(
+      '/alice/logout',
+      { method: 'POST', headers: { Cookie: 'blog_session_u1=tok123' } },
+      env(makeDb({ users: { alice: 'u1' }, meta })),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect(res.headers.get('set-cookie') ?? '').toContain('blog_session_u1=')
+    const session = await app.request(
+      '/alice/session',
+      { headers: { Cookie: 'blog_session_u1=tok123' } },
+      env(makeDb({ users: { alice: 'u1' }, meta })),
+    )
+    expect(await session.json()).toEqual({ authed: false })
   })
 
   it('returns 401 for an incorrect blog password', async () => {
@@ -292,14 +330,14 @@ describe('blog routes', () => {
     const app = makeAuthedApp()
     const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' }, meta })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ hasCustomPassword: true, title: null })
+    expect(await res.json()).toEqual({ hasCustomPassword: true, title: null, description: null })
   })
 
   it('GET /settings reports hasCustomPassword false when no custom password is set', async () => {
     const app = makeAuthedApp()
     const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' } })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ hasCustomPassword: false, title: null })
+    expect(await res.json()).toEqual({ hasCustomPassword: false, title: null, description: null })
   })
 
   it('PUT /settings with password null clears the custom password and re-hashes blog-private shares', async () => {
@@ -344,7 +382,7 @@ describe('blog routes', () => {
     expect(meta.get('blog_password_hash:u1')).toBe('')
 
     const settings = await app.request('/settings', {}, env(db))
-    expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null })
+    expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null, description: null })
 
     const auth = await app.request(
       '/alice/auth',
@@ -380,7 +418,7 @@ describe('blog routes', () => {
     expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(true)
 
     const settings = await app.request('/settings', {}, env(db))
-    expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null })
+    expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null, description: null })
 
     const oldAuth = await app.request(
       '/alice/auth',
@@ -426,7 +464,23 @@ describe('blog routes', () => {
       env(db),
     )
     expect(res.status).toBe(200)
-    expect(await res.json()).toMatchObject({ id: 'n1', slug: 'private-post', tags: ['blog-private'] })
+    expect(await res.json()).toMatchObject({
+      id: 'n1', slug: 'private-post', tags: ['blog-private'], previous: null, next: null,
+    })
+  })
+
+  it('GET /:username/moments returns the paged moments response', async () => {
+    const app = makeApp()
+    const res = await app.request('/alice/moments', {}, env(makeDb({ users: { alice: 'u1' } })))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ moments: [], page: 1, hasMore: false })
+  })
+
+  it('GET /:username/timeline returns the paged timeline response', async () => {
+    const app = makeApp()
+    const res = await app.request('/alice/timeline', {}, env(makeDb({ users: { alice: 'u1' } })))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ items: [], page: 1, hasMore: false })
   })
 
   it('share get response omits blogPublished', async () => {

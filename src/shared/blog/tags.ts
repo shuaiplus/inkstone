@@ -1,6 +1,7 @@
 export const BLOG_PUBLIC_TAG = 'blog-public'
 export const BLOG_PRIVATE_TAG = 'blog-private'
 export const RESERVED_BLOG_TAGS: readonly string[] = [BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG]
+export const MOMENTS_FOLDER_NAME = 'Moments'
 
 export type BlogTier = 'none' | 'public' | 'private'
 

@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { filterVisibleTags, isReservedBlogTag } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import type { SyncDeletion, SyncResponse } from '@shared/types'
 import type { AppBindings } from '../env'
@@ -155,16 +154,14 @@ syncRoutes.get('/', requireAuth, async (c) => {
           .bind(userId, ...ids)
           .all<TagRow>(),
       )
-  const tags = filterVisibleTags(allTags)
+  const tags = allTags
 
   const gotNotes = new Set(notes.map((n) => n.id))
   for (const id of noteIds) if (!gotNotes.has(id)) deletions.push({ entity: 'note', id })
   const gotFolders = new Set(folders.map((f) => f.id))
   for (const id of folderIds) if (!gotFolders.has(id)) deletions.push({ entity: 'folder', id })
   const gotTags = new Set(tags.map((t) => t.id))
-  const reservedTagIds = new Set(allTags.filter((t) => isReservedBlogTag(t.name)).map((t) => t.id))
   for (const id of tagIds) {
-    if (reservedTagIds.has(id)) continue
     if (!gotTags.has(id)) deletions.push({ entity: 'tag', id })
   }
 
@@ -256,7 +253,7 @@ async function fullSnapshot(
     siteChanged: true,
     notes: pageNotes.map(toNoteSummary),
     folders: folders.results.map(toFolder),
-    tags: filterVisibleTags(tags.results).map(toTag),
+    tags: tags.results.map(toTag),
     deletions: [],
     serverTime: Date.now(),
   }
