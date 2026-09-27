@@ -15,10 +15,19 @@ export const BLOG_SESSION_COOKIE = (userId: string): string => `blog_session_${u
 
 export async function setBlogPassword(db: D1Database, userId: string, password: string): Promise<void> {
   await setMeta(db, BLOG_PASSWORD_KEY(userId), await hashPassword(password))
+  await invalidateBlogSessions(db, userId)
 }
 
 export async function clearBlogPassword(db: D1Database, userId: string): Promise<void> {
   await setMeta(db, BLOG_PASSWORD_KEY(userId), '')
+  await invalidateBlogSessions(db, userId)
+}
+
+async function invalidateBlogSessions(db: D1Database, userId: string): Promise<void> {
+  await db
+    .prepare('DELETE FROM app_meta WHERE key LIKE ?1')
+    .bind(`${BLOG_SESSION_PREFIX}${userId}:%`)
+    .run()
 }
 
 export async function setBlogTitle(db: D1Database, userId: string, title: string): Promise<void> {
