@@ -91,7 +91,6 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
         };
     }, [note?.id, reload]);
     useEffect(() => () => {
-        noteIdRef.current = null;
         loadEpoch.current++;
         mutationEpoch.current++;
         busyRef.current = null;
