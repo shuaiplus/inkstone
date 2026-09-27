@@ -3,6 +3,7 @@ import type { BlogPostDetail } from '@shared/blog/types'
 import { BlogMarkdown } from '../components/markdown'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { t } from '../../lib/i18n'
 
 function formatDate(ts: number): string {
   if (!Number.isFinite(ts) || !ts)
@@ -27,11 +28,11 @@ export default function PostPage({ username, slug }: {
   if (status === 'auth')
     return <LoginPage username={username} />
   if (status === 'loading')
-    return <div className="blog-loading">Loading…</div>
+    return <div className="blog-loading">{t('blog.loading')}</div>
   if (status === 'error' || !data)
     return (
       <div className="blog-error-card">
-        <p>Could not load this post.</p>
+        <p>{t('blog.post_load_error')}</p>
       </div>
     )
 

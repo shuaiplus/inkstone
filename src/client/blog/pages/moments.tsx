@@ -3,6 +3,7 @@ import type { MomentItem } from '@shared/blog/types'
 import { BlogMarkdown } from '../components/markdown'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { t } from '../../lib/i18n'
 
 function formatDate(ts: number): string {
   if (!Number.isFinite(ts) || !ts)
@@ -25,19 +26,19 @@ export default function MomentsPage({ username }: {
   if (status === 'auth')
     return <LoginPage username={username} />
   if (status === 'loading')
-    return <div className="blog-loading">Loading…</div>
+    return <div className="blog-loading">{t('blog.loading')}</div>
   if (status === 'error' || !data)
     return (
       <div className="blog-error-card">
-        <p>Could not load moments.</p>
+        <p>{t('blog.moments_load_error')}</p>
       </div>
     )
 
   return (
     <div>
-      <h1 className="blog-page-title">Moments</h1>
+      <h1 className="blog-page-title">{t('blog.moments')}</h1>
       {data.moments.length === 0 ? (
-        <p className="blog-empty">No moments yet.</p>
+        <p className="blog-empty">{t('blog.no_moments')}</p>
       ) : (
         data.moments.map((moment) => (
           <article key={moment.id} className="blog-card">

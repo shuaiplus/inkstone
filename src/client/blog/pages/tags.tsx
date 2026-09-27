@@ -2,6 +2,7 @@ import { blogApi } from '../api'
 import type { BlogTag } from '@shared/blog/types'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { t } from '../../lib/i18n'
 
 export default function TagsPage({ username }: {
   username: string
@@ -14,20 +15,20 @@ export default function TagsPage({ username }: {
   if (status === 'auth')
     return <LoginPage username={username} />
   if (status === 'loading')
-    return <div className="blog-loading">Loading…</div>
+    return <div className="blog-loading">{t('blog.loading')}</div>
   if (status === 'error' || !data)
     return (
       <div className="blog-error-card">
-        <p>Could not load tags.</p>
+        <p>{t('blog.tags_load_error')}</p>
       </div>
     )
 
   const base = `/blog/${encodeURIComponent(username)}`
   return (
     <div>
-      <h1 className="blog-page-title">Tags</h1>
+      <h1 className="blog-page-title">{t('blog.tags')}</h1>
       {data.tags.length === 0 ? (
-        <p className="blog-empty">No tags yet.</p>
+        <p className="blog-empty">{t('blog.no_tags')}</p>
       ) : (
         <div className="blog-card-tags">
           {data.tags.map((tag) => (

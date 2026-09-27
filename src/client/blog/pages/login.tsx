@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { blogApi } from '../api'
+import { t } from '../../lib/i18n'
 
 export default function LoginPage({ username }: {
   username: string
@@ -32,17 +33,17 @@ export default function LoginPage({ username }: {
 
   return (
     <div className="blog-login">
-      <h1>Protected blog</h1>
-      <p>This blog is password-protected. Enter the password to continue.</p>
+      <h1>{t('blog.protected_blog')}</h1>
+      <p>{t('blog.password_prompt')}</p>
       <form className="blog-login-form" onSubmit={onSubmit}>
         <input
           type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="Password"
+          placeholder={t('blog.password')}
           autoComplete="current-password"
           autoFocus
-          aria-label="Password"
+          aria-label={t('blog.password')}
         />
         {error && <p className="blog-login-error" role="alert">{error}</p>}
         <button type="submit" disabled={busy}>

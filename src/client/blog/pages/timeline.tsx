@@ -3,6 +3,7 @@ import { blogApi } from '../api'
 import type { TimelineItem } from '@shared/blog/types'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { t } from '../../lib/i18n'
 
 function formatDate(ts: number): string {
   if (!Number.isFinite(ts) || !ts)
@@ -38,19 +39,19 @@ export default function TimelinePage({ username }: {
   if (status === 'auth')
     return <LoginPage username={username} />
   if (status === 'loading')
-    return <div className="blog-loading">Loading…</div>
+    return <div className="blog-loading">{t('blog.loading')}</div>
   if (status === 'error' || !data)
     return (
       <div className="blog-error-card">
-        <p>Could not load the timeline.</p>
+        <p>{t('blog.timeline_load_error')}</p>
       </div>
     )
 
   return (
     <div>
-      <h1 className="blog-page-title">Timeline</h1>
+      <h1 className="blog-page-title">{t('blog.timeline')}</h1>
       {data.items.length === 0 ? (
-        <p className="blog-empty">No timeline items yet.</p>
+        <p className="blog-empty">{t('blog.no_timeline')}</p>
       ) : (
         byYear.map(([year, items]) => (
           <section key={year}>

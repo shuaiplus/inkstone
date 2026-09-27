@@ -4,6 +4,7 @@ import type { BlogPostsResponse } from '@shared/blog/types'
 import { FeedCard } from '../components/feed-card'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { t } from '../../lib/i18n'
 
 export default function FeedPage({ username }: {
   username: string
@@ -17,30 +18,30 @@ export default function FeedPage({ username }: {
   if (status === 'auth')
     return <LoginPage username={username} />
   if (status === 'loading')
-    return <div className="blog-loading">Loading…</div>
+    return <div className="blog-loading">{t('blog.loading')}</div>
   if (status === 'error' || !data)
     return (
       <div className="blog-error-card">
-        <p>Could not load the feed. Please try again later.</p>
+        <p>{t('blog.feed_load_error')}</p>
       </div>
     )
 
   return (
     <div>
-      <h1 className="blog-page-title">Articles</h1>
+      <h1 className="blog-page-title">{t('blog.articles')}</h1>
       {data.posts.length === 0 ? (
-        <p className="blog-empty">No articles yet.</p>
+        <p className="blog-empty">{t('blog.no_articles')}</p>
       ) : (
         data.posts.map((post) => (
           <FeedCard key={post.id} post={post} username={username} />
         ))
       )}
-      <nav className="blog-pagination" aria-label="Pagination">
+      <nav className="blog-pagination" aria-label={t('blog.pagination')}>
         <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-          ← Previous
+          {t('blog.previous')}
         </button>
         <button type="button" disabled={!data.hasMore} onClick={() => setPage((p) => p + 1)}>
-          Next →
+          {t('blog.next')}
         </button>
       </nav>
     </div>

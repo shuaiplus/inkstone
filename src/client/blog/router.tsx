@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, type ComponentType, type LazyExoticComponent
 import { BlogAuthError } from './api'
 import { BlogHeader } from './components/header'
 import { BlogFooter } from './components/footer'
+import { t } from '../lib/i18n'
 import './styles.css'
 
 const FeedPage = lazy(() => import('./pages/feed'))
@@ -58,7 +59,7 @@ class AuthBoundary extends Component<AuthBoundaryProps, AuthBoundaryState> {
   render(): ReactNode {
     if (this.state.authError) {
       return (
-        <Suspense fallback={<div className="blog-loading">Loading…</div>}>
+        <Suspense fallback={<div className="blog-loading">{t('blog.loading')}</div>}>
           <LoginPage username={this.props.username} />
         </Suspense>
       )
@@ -76,7 +77,7 @@ export default function BlogApp({ username }: {
       <BlogHeader username={username} />
       <main className="blog-main">
         <AuthBoundary username={username}>
-          <Suspense fallback={<div className="blog-loading">Loading…</div>}>
+          <Suspense fallback={<div className="blog-loading">{t('blog.loading')}</div>}>
             <Component {...props} />
           </Suspense>
         </AuthBoundary>
