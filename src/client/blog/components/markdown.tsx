@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderMarkdown } from '../../lib/markdown/renderer'
-import { enhancePreview } from '../../lib/markdown/enhance'
+import { enhancePreview, renderPendingMermaid } from '../../lib/markdown/enhance'
 
 function addShareAccess(html: string, slug: string): string {
   const template = document.createElement('template')
@@ -61,9 +61,20 @@ export function BlogMarkdown({ content, slug }: {
   }, [content, slug])
 
   useEffect(() => {
-    if (!hostRef.current)
+    const host = hostRef.current
+    if (!host)
       return
-    void enhancePreview(hostRef.current, { math: true, mermaid: true, dark })
+    let cancelled = false
+    const isCurrent = () => !cancelled && hostRef.current === host
+    void (async () => {
+      await enhancePreview(host, { math: true, mermaid: true, dark })
+      if (!isCurrent())
+        return
+      await renderPendingMermaid(host, dark, { isCurrent })
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [html, dark])
 
   return (
