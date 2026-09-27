@@ -16,6 +16,7 @@ export interface TimelineItem {
   id: string
   title: string
   created_at: number
+  year: string
 }
 
 export interface BlogTag {
@@ -36,8 +37,3 @@ export interface BlogPostsResponse {
   hasMore: boolean
 }
 
-export interface MomentsResponse {
-  moments: MomentItem[]
-  page: number
-  hasMore: boolean
-}

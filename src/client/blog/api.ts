@@ -1,5 +1,5 @@
 import type {
-  BlogPostsResponse, BlogPostDetail, TimelineItem, BlogTag, BlogPostSummary, MomentsResponse,
+  BlogPostsResponse, BlogPostDetail, TimelineItem, BlogTag, BlogPostSummary, MomentItem,
 } from '@shared/blog/types'
 import { CLIENT_HEADER } from '@shared/constants'
 
@@ -35,7 +35,7 @@ export const blogApi = {
   post: (username: string, slug: string) =>
     blogFetch<BlogPostDetail>(`/${encodeURIComponent(username)}/posts/${encodeURIComponent(slug)}`),
   moments: (username: string) =>
-    blogFetch<MomentsResponse>(`/${encodeURIComponent(username)}/moments`),
+    blogFetch<{ moments: MomentItem[] }>(`/${encodeURIComponent(username)}/moments`),
   timeline: (username: string) =>
     blogFetch<{ items: TimelineItem[] }>(`/${encodeURIComponent(username)}/timeline`),
   tags: (username: string) =>
