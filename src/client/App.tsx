@@ -15,21 +15,26 @@ const AppShell = lazy(() =>
 const SharePage = lazy(() =>
   import('./features/share/SharePage').then((module) => ({ default: module.SharePage })),
 )
+const BlogApp = lazy(() => import('./blog/router'))
 
 export function App() {
 
   useLocale()
   const status = useSession((s) => s.status)
   const load = useSession((s) => s.load)
+  const [blogUsername] = useState(() => {
+    const match = /^\/blog\/([A-Za-z0-9_-]+)/.exec(location.pathname)
+    return match?.[1] ?? null
+  })
   const [shareSlug] = useState(() => {
     const match = /^\/s\/([A-Za-z0-9_-]+)/.exec(location.pathname)
     return match?.[1] ?? null
   })
 
   useEffect(() => {
-    if (shareSlug) return
+    if (shareSlug || blogUsername) return
     void load()
-  }, [load, shareSlug])
+  }, [load, shareSlug, blogUsername])
 
   useEffect(() => watchSystemTheme(), [])
 
@@ -38,18 +43,31 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (!shareSlug && status !== 'loading') requestOfflineWarmup()
-  }, [shareSlug, status])
+    if (!shareSlug && !blogUsername && status !== 'loading') requestOfflineWarmup()
+  }, [shareSlug, blogUsername, status])
 
   useEffect(() => {
-    if (shareSlug || status !== 'loading') dismissBootScreen()
-  }, [status, shareSlug])
+    if (shareSlug || blogUsername || status !== 'loading') dismissBootScreen()
+  }, [status, shareSlug, blogUsername])
 
   useEffect(() => {
-    if (shareSlug) return
+    if (shareSlug || blogUsername) return
     const timer = window.setTimeout(() => dismissBootScreen(), 8000)
     return () => window.clearTimeout(timer)
-  }, [shareSlug])
+  }, [shareSlug, blogUsername])
+
+  if (blogUsername) {
+    return (
+      <>
+        <ErrorBoundary>
+          <Suspense fallback={<PageFallback />}>
+            <BlogApp username={blogUsername} />
+          </Suspense>
+        </ErrorBoundary>
+        <Toaster />
+      </>
+    )
+  }
 
   if (shareSlug) {
     return (
