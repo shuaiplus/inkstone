@@ -23,6 +23,14 @@ export async function clearBlogPassword(db: D1Database, userId: string): Promise
   await invalidateBlogSessions(db, userId)
 }
 
+export async function getBlogPasswordHash(db: D1Database, userId: string): Promise<string> {
+  const custom = await getMeta(db, BLOG_PASSWORD_KEY(userId))
+  if (custom) return custom
+  const row = await db.prepare(`SELECT password_hash FROM users WHERE id = ?1`).bind(userId).first<{ password_hash: string }>()
+  if (!row?.password_hash) throw new Error('Account password missing')
+  return row.password_hash
+}
+
 async function invalidateBlogSessions(db: D1Database, userId: string): Promise<void> {
   await db
     .prepare('DELETE FROM app_meta WHERE key LIKE ?1')
