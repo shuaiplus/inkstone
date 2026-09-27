@@ -1,6 +1,13 @@
 import { Hono } from 'hono'
 import type { AppBindings } from '../env'
-import { readJson } from '../lib/request'
+import { readJson, requestClientIp } from '../lib/request'
+import {
+  assertNotLocked,
+  clearLoginFailures,
+  consumeAttemptBudget,
+  recordLoginFailure,
+  ThrottleError,
+} from '../lib/throttle'
 import { requireAuth } from '../middleware/auth'
 import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie,
@@ -43,9 +50,43 @@ blogRoutes.use('/:username/*', async (c, next) => {
 
 blogRoutes.post('/:username/auth', async (c) => {
   const userId = c.get('blogOwnerId')!
+  const username = c.req.param('username')
   const body = await readJson<{ password?: string }>(c, 4096)
-  const token = await handleBlogAuth(c.env.DB, userId, body.password ?? '')
-  if (!token) return c.json({ error: { code: 'invalid_credentials', message: 'Invalid blog password' } }, 401)
+  const password = typeof body.password === 'string' ? body.password : ''
+  const throttleKeys = [
+    `blog:${username}:ip:${requestClientIp(c)}`,
+    { key: `blog-auth:${username}`, freeFails: 40 },
+  ]
+  const workKeys = [
+    {
+      key: `blog-work:${username}:ip:${requestClientIp(c)}`,
+      maxAttempts: 8,
+      windowMs: 10 * 60 * 1000,
+    },
+    {
+      key: `blog-work-account:${username}`,
+      maxAttempts: 60,
+      windowMs: 10 * 60 * 1000,
+    },
+  ]
+  try {
+    await assertNotLocked(c.env.DB, throttleKeys)
+    await consumeAttemptBudget(c.env.DB, workKeys)
+  } catch (err) {
+    if (err instanceof ThrottleError) {
+      return c.json({ error: { code: 'too_many_attempts', message: 'Too many attempts. Try again later' } }, 429)
+    }
+    throw err
+  }
+  const token = await handleBlogAuth(c.env.DB, userId, password)
+  if (!token) {
+    await recordLoginFailure(c.env.DB, throttleKeys)
+    return c.json({ error: { code: 'invalid_credentials', message: 'Invalid blog password' } }, 401)
+  }
+  await clearLoginFailures(c.env.DB, [
+    ...throttleKeys.map((target) => (typeof target === 'string' ? target : target.key)),
+    ...workKeys.map((target) => target.key),
+  ])
   setBlogSessionCookie(c, userId, token)
   return c.json({ ok: true })
 })
