@@ -12,6 +12,7 @@ import { Modal, Tooltip, confirm } from '../../components/overlay';
 import { Empty, LoadingBlock } from '../../components/feedback';
 import { useUi } from '../../store/ui';
 import { useActiveNote } from '../../store/notes';
+import { useSession } from '../../store/session';
 import { t } from "../../lib/i18n";
 import {
     expiresInForSelection,
@@ -31,6 +32,8 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
 }) {
     const { note: activeNote } = useActiveNote();
     const note = targetNote ?? activeNote;
+    const username = useSession((s) => s.user?.username);
+    const blogUrl = username ? `/blog/${encodeURIComponent(username)}` : '';
     const toast = useUi((s) => s.toast);
     const [share, setShare] = useState<ShareInfo | null | undefined>(undefined);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -298,7 +301,7 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 text-[13px] font-medium">
                 <Rss size={12} className="text-[var(--text-tertiary)]"/>{t("share.publish_to_blog")}</div>
-              <p className="mt-0.5 text-[11.5px] text-[var(--text-tertiary)]">{t("share.publish_to_blog_desc")}</p>
+              <p className="mt-0.5 text-[11.5px] text-[var(--text-tertiary)]">{t("share.publish_to_blog_desc", { username: blogUrl })}</p>
             </div>
             <Switch checked={blogPublished} disabled={busy !== null} onChange={(next) => void toggleBlogPublished(next)} label={t("share.publish_to_blog")}/>
           </div>

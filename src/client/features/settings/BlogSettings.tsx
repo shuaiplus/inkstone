@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { KeyRound, RefreshCw, Rss, Trash2, Type } from 'lucide-react'
+import { LIMITS } from '@shared/constants'
 import { blogApi } from '../../blog/api'
 import { Button } from '../../components/primitives'
 import { Field, Input } from '../../components/form'
@@ -193,6 +194,7 @@ export function BlogSettings() {
             <Input
               type="password"
               value={password}
+              maxLength={LIMITS.passwordMaxLength}
               autoComplete="new-password"
               placeholder={t('settings.blog_password_placeholder')}
               onChange={(e) => setPassword(e.target.value)}

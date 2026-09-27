@@ -969,7 +969,7 @@ export const ZH_CN_MESSAGES = {
     "share.passcode": "口令",
     "share.passcode_protected": "已加口令",
     "share.publish_to_blog": "发布到博客",
-    "share.publish_to_blog_desc": "在 /blog/:username 上公开显示这篇笔记",
+    "share.publish_to_blog_desc": "在 {username} 上公开显示这篇笔记",
     "share.public_link": "公开链接",
     "share.public_link_created": "公开链接已生成",
     "share.public_links_are_read_only_visitors_can_see_only_the_latest_version_of_t": "公开链接为只读。访问者只能查看这篇笔记的最新内容，无法访问其他笔记。",

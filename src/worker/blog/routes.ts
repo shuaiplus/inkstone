@@ -1,5 +1,7 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
+import { LIMITS } from '@shared/constants'
 import type { AppBindings } from '../env'
+import { ApiError } from '../lib/errors'
 import { readJson, requestClientIp } from '../lib/request'
 import {
   assertNotLocked,
@@ -34,6 +36,9 @@ blogRoutes.put('/settings', async (c) => {
   const userId = c.get('userId')
   const body = await readJson<{ password?: string | null; title?: string }>(c, 4096)
   if (body.password !== undefined) {
+    if (typeof body.password === 'string' && body.password.length > LIMITS.passwordMaxLength) {
+      throw ApiError.badRequest(`The blog password must not exceed ${LIMITS.passwordMaxLength} characters`)
+    }
     if (body.password === null || body.password === '') await clearBlogPassword(c.env.DB, userId)
     else await setBlogPassword(c.env.DB, userId, body.password)
   }
@@ -99,8 +104,8 @@ blogRoutes.get('/:username/meta', async (c) => {
 
 blogRoutes.use('/:username/*', blogAuthMiddleware)
 
-const publicOnly = async (c: { env: AppBindings['Bindings']; get: (k: string) => string }) =>
-  !(await hasBlogPassword(c.env.DB, c.get('blogOwnerId')))
+const publicOnly = async (c: Context<AppBindings>) =>
+  !(await hasBlogPassword(c.env.DB, c.get('blogOwnerId')!))
 
 blogRoutes.get('/:username/posts', async (c) => {
   const userId = c.get('blogOwnerId')!

@@ -15,11 +15,19 @@ function formatDate(ts: number): string {
   })
 }
 
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export default function PostPage({ username, slug }: {
   username: string
   slug: string
 }) {
-  const decodedSlug = decodeURIComponent(slug)
+  const decodedSlug = safeDecodeURIComponent(slug)
   const { status, data } = useBlogQuery<BlogPostDetail>(
     () => blogApi.post(username, decodedSlug),
     [username, decodedSlug],

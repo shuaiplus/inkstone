@@ -5,11 +5,19 @@ import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
 import { t } from '../../lib/i18n'
 
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 export default function TagPage({ username, name }: {
   username: string
   name: string
 }) {
-  const decodedName = decodeURIComponent(name)
+  const decodedName = safeDecodeURIComponent(name)
   const { status, data } = useBlogQuery<{ name: string; posts: BlogPostSummary[] }>(
     () => blogApi.tag(username, decodedName),
     [username, decodedName],
