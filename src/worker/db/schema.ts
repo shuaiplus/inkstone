@@ -193,6 +193,7 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_shares_note ON shares(note_id)`,
   `CREATE INDEX IF NOT EXISTS idx_shares_user_created ON shares(user_id, created_at DESC, slug DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_shares_blog ON shares(user_id, blog_published, created_at DESC)`,
 
   `CREATE TABLE IF NOT EXISTS share_asset_sessions (
     id TEXT PRIMARY KEY,
@@ -524,9 +525,9 @@ const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   },
   {
     version: 13,
+    skipIfColumnExists: { table: 'shares', column: 'blog_published' },
     statements: [
       `ALTER TABLE shares ADD COLUMN blog_published INTEGER NOT NULL DEFAULT 0`,
-      `CREATE INDEX IF NOT EXISTS idx_shares_blog ON shares(user_id, blog_published, created_at DESC)`,
     ],
   },
 ]
