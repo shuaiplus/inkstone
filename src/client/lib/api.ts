@@ -481,7 +481,7 @@ export const api = {
       request<{ shares: ShareListItem[] }>('/api/share', { signal }),
     get: (noteId: string, signal?: AbortSignal) =>
       request<{ share: ShareInfo | null }>(`/api/share/${noteId}`, { signal }),
-    create: (noteId: string, body: { password?: string | null; expiresIn?: number | null }) =>
+    create: (noteId: string, body: { password?: string | null; expiresIn?: number | null; blogPublished?: boolean }) =>
       request<{ share: ShareInfo }>(`/api/share/${noteId}`, { method: 'POST', body }),
     remove: (noteId: string) => request<{ ok: true }>(`/api/share/${noteId}`, { method: 'DELETE' }),
     read: (slug: string, password?: string, signal?: AbortSignal) =>
