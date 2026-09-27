@@ -1,6 +1,7 @@
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowDownWideNarrow, CheckSquare2, Columns2, Copy, FileCode, FileDown, FileText, FolderInput, Link2, MoreHorizontal, Pin, PinOff, PanelLeft, Plus, RotateCcw, Search, Star, StarOff, Trash2, X, } from 'lucide-react';
 import type { NoteSummary, SortKey, ViewKind } from '@shared/types';
+import { filterVisibleTags, isReservedBlogTag } from '@shared/blog/tags';
 import { cn } from '../../lib/cn';
 import { groupLabel } from '../../lib/time';
 import { useNow } from '../../lib/hooks';
@@ -60,7 +61,7 @@ export function NoteList() {
     const loadMoreRef = useRef<HTMLDivElement>(null);
     const [renderLimit, setRenderLimit] = useState(INITIAL_RENDERED_NOTES);
     const now = useNow();
-    const tagColors = useMemo(() => new Map((tags ?? []).map((item) => [item.name, item.color])), [tags]);
+    const tagColors = useMemo(() => new Map(filterVisibleTags(tags ?? []).map((item) => [item.name, item.color])), [tags]);
 
     useEffect(() => setFilter(''), [view, folderId, tag, breakpoint]);
     const title = useMemo(() => {
@@ -482,8 +483,8 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, tagColors, pos
                 {note.excerpt}
               </p>)}
 
-            {note.tags.length > 0 && density === 'comfortable' && (<div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap text-[10.5px] text-[var(--text-tertiary)]">
-                {note.tags.map((tag) => (<span key={tag} className="max-w-[70%] shrink-0 truncate" style={{ color: tagColors.get(tag) ?? undefined }}>
+            {note.tags.some((name) => !isReservedBlogTag(name)) && density === 'comfortable' && (<div className="mt-1.5 flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap text-[10.5px] text-[var(--text-tertiary)]">
+                {note.tags.filter((name) => !isReservedBlogTag(name)).map((tag) => (<span key={tag} className="max-w-[70%] shrink-0 truncate" style={{ color: tagColors.get(tag) ?? undefined }}>
                     #{tag}
                   </span>))}
               </div>)}

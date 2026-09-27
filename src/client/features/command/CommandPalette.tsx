@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Archive, Clock, Columns2, Download, Eye, FileText, FolderPlus, Hash, Keyboard, Moon, Palette, Pencil, Plus, Search, Settings, Share2, Star, Sun, Trash2, Waypoints, X, } from 'lucide-react';
 import type { NoteSummary, SearchHit } from '@shared/types';
+import { filterVisibleTags } from '@shared/blog/tags';
 import { truncateText } from '@shared/text-utils';
 import { cn } from '../../lib/cn';
 import { api } from '../../lib/api';
@@ -305,7 +306,7 @@ export function CommandPalette({ onClose }: {
             score: 10,
             run: () => void openNote(hit.note.id),
         }));
-        const matchedTags = fuzzyFilter(tags, text, (t) => t.name, 5).map<Item>(({ item, match }) => ({
+        const matchedTags = fuzzyFilter(filterVisibleTags(tags), text, (t) => t.name, 5).map<Item>(({ item, match }) => ({
             id: `tag-${item.id}`,
             kind: 'tag',
             label: `#${item.name}`,

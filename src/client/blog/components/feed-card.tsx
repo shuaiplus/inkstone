@@ -1,4 +1,5 @@
 import type { BlogPostSummary } from '@shared/blog/types'
+import { isReservedBlogTag } from '@shared/blog/tags'
 
 function formatDate(ts: number): string {
   if (!Number.isFinite(ts) || !ts)
@@ -24,9 +25,9 @@ export function FeedCard({ post, username }: {
       <div className="blog-card-meta">
         <time dateTime={new Date(post.created_at).toISOString()}>{formatDate(post.created_at)}</time>
       </div>
-      {post.tags.length > 0 && (
+      {post.tags.some((tag) => !isReservedBlogTag(tag)) && (
         <div className="blog-card-tags">
-          {post.tags.map((tag) => (
+          {post.tags.filter((tag) => !isReservedBlogTag(tag)).map((tag) => (
             <a key={tag} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag)}`}>
               {tag}
             </a>

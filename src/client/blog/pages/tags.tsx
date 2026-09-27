@@ -1,5 +1,6 @@
 import { blogApi } from '../api'
 import type { BlogTag } from '@shared/blog/types'
+import { filterVisibleTags } from '@shared/blog/tags'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
 import { t } from '../../lib/i18n'
@@ -24,14 +25,15 @@ export default function TagsPage({ username }: {
     )
 
   const base = `/blog/${encodeURIComponent(username)}`
+  const visibleTags = filterVisibleTags(data.tags)
   return (
     <div>
       <h1 className="blog-page-title">{t('blog.tags')}</h1>
-      {data.tags.length === 0 ? (
+      {visibleTags.length === 0 ? (
         <p className="blog-empty">{t('blog.no_tags')}</p>
       ) : (
         <div className="blog-card-tags">
-          {data.tags.map((tag) => (
+          {visibleTags.map((tag) => (
             <a key={tag.name} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag.name)}`}>
               {tag.name} ({tag.count})
             </a>

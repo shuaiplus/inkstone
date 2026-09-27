@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { getCookie } from 'hono/cookie'
+import { BLOG_PRIVATE_TAG } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import { extractAttachmentIds } from '@shared/markdown-utils'
 import type { Attachment } from '@shared/types'
@@ -41,8 +42,6 @@ interface AttachmentRow {
 
 const ATTACHMENT_LIST_PAGE_SIZE = 500
 const ATTACHMENT_SCAN_PAGE_SIZE = 100
-
-const BLOG_PRIVATE_TAG = 'blog-private'
 
 function encodeContentDispositionFilename(filename: string): string {
   return encodeURIComponent(filename).replace(/['()*]/g, (character) =>

@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { filterVisibleTags } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import { countText, deriveExcerpt, replaceTagInContent } from '@shared/markdown-utils'
 import { organizerColorOrNull } from '@shared/organizer-colors'
@@ -29,7 +30,7 @@ tagsRoutes.get('/', async (c) => {
   )
     .bind(c.get('userId'))
     .all<TagRow>()
-  return c.json({ tags: results.map(toTag) })
+  return c.json({ tags: filterVisibleTags(results.map(toTag)) })
 })
 
 tagsRoutes.post('/', async (c) => {

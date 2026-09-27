@@ -13,3 +13,7 @@ export function blogTierOfTags(tags: readonly string[]): BlogTier {
 export function isReservedBlogTag(name: string): boolean {
   return RESERVED_BLOG_TAGS.includes(name)
 }
+
+export function filterVisibleTags<T extends { name: string }>(tags: T[]): T[] {
+  return tags.filter((tag) => !isReservedBlogTag(tag.name))
+}

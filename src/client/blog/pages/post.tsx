@@ -1,5 +1,6 @@
 import { blogApi } from '../api'
 import type { BlogPostDetail } from '@shared/blog/types'
+import { isReservedBlogTag } from '@shared/blog/tags'
 import { BlogMarkdown } from '../components/markdown'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
@@ -51,9 +52,9 @@ export default function PostPage({ username, slug }: {
       <div className="blog-card-meta">
         <time dateTime={new Date(data.created_at).toISOString()}>{formatDate(data.created_at)}</time>
       </div>
-      {data.tags.length > 0 && (
+      {data.tags.some((tag) => !isReservedBlogTag(tag)) && (
         <div className="blog-card-tags">
-          {data.tags.map((tag) => (
+          {data.tags.filter((tag) => !isReservedBlogTag(tag)).map((tag) => (
             <a key={tag} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag)}`}>
               {tag}
             </a>

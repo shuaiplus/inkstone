@@ -4,6 +4,7 @@ import { ArrowLeft, Columns2, Download, Eye, FileCode, FileDown, FileText, Folde
 import { cn } from '../../lib/cn';
 import { api } from '../../lib/api';
 import { readingMinutes } from '@shared/markdown-utils';
+import { filterVisibleTags, isReservedBlogTag } from '@shared/blog/tags';
 import { LIMITS } from '@shared/constants';
 import type { EditorLayout } from '@shared/types';
 import { fullTime } from '../../lib/time';
@@ -144,7 +145,7 @@ export function Workspace({ onMobileBack, pane = 'active', grouped = false, }: {
     const defaultEditorWidth = defaultContentWidth / 2;
     const defaultPreviewWidth = PREVIEW_BORDER_WIDTH + defaultOutlineWidth + defaultEditorWidth;
     const effectiveSplitRatio = splitRatio ?? (containerWidth > 0 ? defaultEditorWidth / containerWidth : 0.5);
-    const tagColors = useMemo(() => new Map(tags.map((tag) => [tag.name, tag.color])), [tags]);
+    const tagColors = useMemo(() => new Map(filterVisibleTags(tags).map((tag) => [tag.name, tag.color])), [tags]);
     const editorWidth = splitRatio === null
         ? containerWidth > 0
             ? `${defaultEditorWidth}px`
@@ -190,7 +191,7 @@ export function Workspace({ onMobileBack, pane = 'active', grouped = false, }: {
             .sort((a, b) => b.updatedAt - a.updatedAt)
             .slice(0, 300)
             .map((n) => ({ id: n.id, title: n.title, excerpt: n.excerpt })),
-        tags: () => tags.map((t) => ({ name: t.name, count: t.count })),
+        tags: () => filterVisibleTags(tags).map((t) => ({ name: t.name, count: t.count })),
     }), [notes, tags, note?.id]);
     const handlers = useMemo(() => ({
         uploadFile: async (file: File) => {
@@ -511,8 +512,8 @@ export function Workspace({ onMobileBack, pane = 'active', grouped = false, }: {
               <span className="truncate">{noteFolderPath}</span>
             </button>
           </Tooltip>)}
-        {note.tags.length > 0 && (<span className="flex min-w-0 items-center gap-0.5 overflow-hidden">
-            {note.tags.slice(0, isMobile ? 2 : 4).map((name) => (<button key={name} type="button" onClick={() => useUi.getState().openView('tag', { tag: name })} className="inline-flex min-w-0 items-center gap-0.5 rounded px-1 py-0.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--accent)]">
+        {note.tags.some((name) => !isReservedBlogTag(name)) && (<span className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+            {note.tags.filter((name) => !isReservedBlogTag(name)).slice(0, isMobile ? 2 : 4).map((name) => (<button key={name} type="button" onClick={() => useUi.getState().openView('tag', { tag: name })} className="inline-flex min-w-0 items-center gap-0.5 rounded px-1 py-0.5 text-[var(--text-tertiary)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--accent)]">
                 <Hash size={9} className="shrink-0" style={{ color: tagColors.get(name) ?? undefined }}/><span className="truncate">{name}</span>
               </button>))}
           </span>)}
