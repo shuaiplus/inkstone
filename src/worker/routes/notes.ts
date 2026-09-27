@@ -11,6 +11,7 @@ import type {
   SortOrder,
   ViewKind,
 } from '@shared/types'
+import { syncBlogShare, withdrawBlogShare } from '../blog/publish'
 import type { AppBindings } from '../env'
 import { NOTE_COLUMNS, NOTE_COLUMNS_FULL, splitTags, toNote, toNoteSummary, type NoteRow } from '../db/rows'
 import {
@@ -333,6 +334,7 @@ notesRoutes.post('/', async (c) => {
   if (!created) throw ApiError.conflict('This note id is already in use')
   await broadcastCursor(c)
   if (insertResult?.meta.changes) {
+    await syncBlogShare(c.env.DB, userId, id, extractTags(content))
     await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
     scheduleFtsDrain(c)
   }
@@ -514,6 +516,9 @@ notesRoutes.patch('/:id', async (c) => {
     const current = await loadNote(c.env.DB, userId, id)
     throw ApiError.conflict('This note was modified elsewhere', { server: current })
   }
+  if (contentChanged) {
+    await syncBlogShare(c.env.DB, userId, id, derivedTags ?? extractTags(newContent))
+  }
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
   let rewroteInbound = false
   if (newTitle !== row.title) {
@@ -617,6 +622,7 @@ notesRoutes.delete('/:id', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
+  await withdrawBlogShare(c.env.DB, userId, id)
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
   await broadcastCursor(c, changeResult?.results?.[0]?.seq)
   scheduleFtsDrain(c)
@@ -659,6 +665,7 @@ notesRoutes.post('/:id/restore', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
+  await syncBlogShare(c.env.DB, userId, id, extractTags(row.content))
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   scheduleFtsDrain(c)
@@ -815,6 +822,7 @@ notesRoutes.post('/:id/duplicate', async (c) => {
     }
     throw error
   }
+  await syncBlogShare(c.env.DB, userId, id, extractTags(content))
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   scheduleFtsDrain(c)
@@ -941,6 +949,7 @@ notesRoutes.post('/:id/versions/:versionId/restore', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
+  await syncBlogShare(c.env.DB, userId, id, extractTags(version.content))
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   scheduleFtsDrain(c)
