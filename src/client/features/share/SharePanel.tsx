@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, ExternalLink, Eye, Globe, Link2, Lock, Trash2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, Eye, Globe, Link2, Lock, Rss, Trash2 } from 'lucide-react';
 import { LIMITS } from '@shared/constants';
 import type { NoteSummary, ShareInfo } from '@shared/types';
 import { api, ApiError } from '../../lib/api';
@@ -38,6 +38,7 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
     const [password, setPassword] = useState('');
     const [usePassword, setUsePassword] = useState(false);
     const [expiry, setExpiry] = useState('0');
+    const [blogPublished, setBlogPublished] = useState(false);
     const [busy, setBusy] = useState<'save' | 'revoke' | null>(null);
     const [copied, setCopied] = useState(false);
     const copiedTimer = useRef(0);
@@ -64,6 +65,7 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
         setPassword('');
         setUsePassword(false);
         setExpiry('0');
+        setBlogPublished(false);
         setCopied(false);
         window.clearTimeout(copiedTimer.current);
         api.share
@@ -74,6 +76,7 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
             setShare(res.share);
             setUsePassword(Boolean(res.share?.hasPassword));
             setExpiry(res.share?.expiresAt ? KEEP_CURRENT_EXPIRY : '0');
+            setBlogPublished(Boolean(res.share?.blogPublished));
         })
             .catch((error) => {
             if (!cancelled && loadEpoch.current === epoch && noteIdRef.current === noteId)
@@ -114,6 +117,7 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
             const res = await api.share.create(noteId, {
                 password: usePassword ? password || undefined : null,
                 expiresIn: expiresInForSelection(expiry),
+                blogPublished,
             });
             if (mutationEpoch.current !== epoch || noteIdRef.current !== noteId)
                 return;
@@ -126,6 +130,46 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
         catch (err) {
             if (mutationEpoch.current !== epoch || noteIdRef.current !== noteId)
                 return;
+            toast({
+                title: t("common.action_failed"),
+                description: err instanceof ApiError ? err.message : String(err),
+                tone: 'danger',
+            });
+        }
+        finally {
+            if (mutationEpoch.current === epoch && noteIdRef.current === noteId) {
+                busyRef.current = null;
+                setBusy(null);
+            }
+        }
+    };
+    const toggleBlogPublished = async (next: boolean) => {
+        if (busyRef.current || share === undefined)
+            return;
+        setBlogPublished(next);
+        if (!share)
+            return;
+        const noteId = note.id;
+        const epoch = ++mutationEpoch.current;
+        loadEpoch.current++;
+        busyRef.current = 'save';
+        setBusy('save');
+        try {
+            const res = await api.share.create(noteId, {
+                password: usePassword ? password || undefined : null,
+                expiresIn: expiresInForSelection(expiry),
+                blogPublished: next,
+            });
+            if (mutationEpoch.current !== epoch || noteIdRef.current !== noteId)
+                return;
+            setShare(res.share);
+            setBlogPublished(Boolean(res.share.blogPublished));
+            onChanged?.();
+        }
+        catch (err) {
+            if (mutationEpoch.current !== epoch || noteIdRef.current !== noteId)
+                return;
+            setBlogPublished(!next);
             toast({
                 title: t("common.action_failed"),
                 description: err instanceof ApiError ? err.message : String(err),
@@ -248,6 +292,15 @@ export function SharePanel({ onClose, targetNote, onChanged }: {
               <p className="mt-0.5 text-[11.5px] text-[var(--text-tertiary)]">{t("share.require_a_passcode_to_view_this_note")}</p>
             </div>
             <Switch checked={usePassword} disabled={busy !== null} onChange={setUsePassword} label={t("common.access_passcode")}/>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 py-1">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 text-[13px] font-medium">
+                <Rss size={12} className="text-[var(--text-tertiary)]"/>{t("share.publish_to_blog")}</div>
+              <p className="mt-0.5 text-[11.5px] text-[var(--text-tertiary)]">{t("share.publish_to_blog_desc")}</p>
+            </div>
+            <Switch checked={blogPublished} disabled={busy !== null} onChange={(next) => void toggleBlogPublished(next)} label={t("share.publish_to_blog")}/>
           </div>
 
           {usePassword && (<Field label={t("share.passcode")} hint={share?.hasPassword ? t("share.leave_blank_to_keep_the_current_passcode") : undefined}>

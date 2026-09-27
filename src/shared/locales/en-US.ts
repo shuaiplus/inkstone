@@ -967,6 +967,8 @@ export const EN_US_MESSAGES = {
     "share.opening": "Opening…",
     "share.passcode": "Passcode",
     "share.passcode_protected": "Passcode protected",
+    "share.publish_to_blog": "Publish to blog",
+    "share.publish_to_blog_desc": "Show this note on your blog at /blog/:username",
     "share.public_link": "Public link",
     "share.public_link_created": "Public link created",
     "share.public_links_are_read_only_visitors_can_see_only_the_latest_version_of_t": "Public links are read-only. Visitors can view only the latest content of this note and cannot access other notes.",
