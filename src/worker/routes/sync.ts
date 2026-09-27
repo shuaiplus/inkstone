@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { filterVisibleTags } from '@shared/blog/tags'
+import { filterVisibleTags, isReservedBlogTag } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import type { SyncDeletion, SyncResponse } from '@shared/types'
 import type { AppBindings } from '../env'
@@ -138,7 +138,7 @@ syncRoutes.get('/', requireAuth, async (c) => {
           .all<FolderRow>(),
       )
 
-  const tags = filterVisibleTags(facetsFull
+  const allTags = facetsFull
     ? (
         await c.env.DB.prepare(
           `SELECT ${TAG_SELECT} FROM tags t
@@ -154,14 +154,19 @@ syncRoutes.get('/', requireAuth, async (c) => {
         )
           .bind(userId, ...ids)
           .all<TagRow>(),
-      ))
+      )
+  const tags = filterVisibleTags(allTags)
 
   const gotNotes = new Set(notes.map((n) => n.id))
   for (const id of noteIds) if (!gotNotes.has(id)) deletions.push({ entity: 'note', id })
   const gotFolders = new Set(folders.map((f) => f.id))
   for (const id of folderIds) if (!gotFolders.has(id)) deletions.push({ entity: 'folder', id })
   const gotTags = new Set(tags.map((t) => t.id))
-  for (const id of tagIds) if (!gotTags.has(id)) deletions.push({ entity: 'tag', id })
+  const reservedTagIds = new Set(allTags.filter((t) => isReservedBlogTag(t.name)).map((t) => t.id))
+  for (const id of tagIds) {
+    if (reservedTagIds.has(id)) continue
+    if (!gotTags.has(id)) deletions.push({ entity: 'tag', id })
+  }
 
   const body: SyncResponse = {
     cursor,

@@ -77,7 +77,7 @@ settingsRoutes.get('/stats', async (c) => {
          FROM attachments WHERE user_id = ?1
      ) attachment_stats`,
   )
-    .bind(userId, userId, ...RESERVED_BLOG_TAGS, userId, userId, userId, userId)
+    .bind(userId, ...RESERVED_BLOG_TAGS)
     .first<Record<string, number>>()
 
   return c.json({
