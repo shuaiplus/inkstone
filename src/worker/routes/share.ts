@@ -56,7 +56,7 @@ shareManageRoutes.use('*', requireAuth)
 
 shareManageRoutes.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT s.slug, s.note_id, s.user_id, s.password_hash, s.expires_at, s.views, s.created_at,
+    `SELECT s.slug, s.note_id, s.user_id, s.password_hash, s.expires_at, s.blog_published, s.views, s.created_at,
             n.title AS note_title, n.deleted_at
        FROM shares s JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
       WHERE s.user_id = ?1
