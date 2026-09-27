@@ -73,6 +73,7 @@ export function createDemoState(): DemoState {
     expiresAt: null,
     views: 12,
     createdAt: now - 86_400_000 * 4,
+    blogPublished: false,
   }
 
   return {

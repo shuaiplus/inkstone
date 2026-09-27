@@ -46,6 +46,7 @@ function toShareInfo(row: ShareRow, origin: string): ShareInfo {
     expiresAt: row.expires_at,
     views: row.views,
     createdAt: row.created_at,
+    blogPublished: false,
   }
 }
 

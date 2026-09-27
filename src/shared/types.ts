@@ -466,6 +466,7 @@ export interface ShareInfo {
   expiresAt: number | null
   views: number
   createdAt: number
+  blogPublished: boolean
 }
 
 export interface ShareListItem extends ShareInfo {

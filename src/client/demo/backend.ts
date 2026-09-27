@@ -829,6 +829,7 @@ export function createDemoBackend(): DemoBackend {
       expiresAt,
       views: existing?.info.views ?? 0,
       createdAt: existing?.info.createdAt ?? Date.now(),
+      blogPublished: existing?.info.blogPublished ?? false,
     }
     state.shares.set(noteId, { info, password })
     return c.json({ share: absoluteShare(info, c.req.url) })
