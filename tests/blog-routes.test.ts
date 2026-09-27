@@ -21,22 +21,30 @@ type MetaStore = Map<string, string>
 
 interface DbOptions {
   users?: Record<string, string>
+  accountHash?: string
   meta?: MetaStore
   posts?: unknown[]
+  postDetail?: unknown
+  blogPrivateNoteIds?: string[]
 }
 
-function makeDb(options: DbOptions = {}): MockDb {
+function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[] } {
   const users = new Map(Object.entries(options.users ?? {}))
   const meta = options.meta ?? new Map()
   const posts = options.posts ?? []
+  const preparedSqls: string[] = []
   return {
+    preparedSqls,
     prepare(sql: string) {
+      preparedSqls.push(sql)
       return {
         bind(...args: unknown[]) {
           return {
             async all<T = unknown>() {
               if (sql.includes('SELECT locked_until FROM login_attempts'))
                 return { results: [] as T[] }
+              if (sql.includes("t.name = 'blog-private'"))
+                return { results: (options.blogPrivateNoteIds ?? []).map((id) => ({ id })) as T[] }
               if (sql.includes('LIMIT ?3 OFFSET ?4'))
                 return { results: posts as T[] }
               return { results: [] as T[] }
@@ -46,12 +54,17 @@ function makeDb(options: DbOptions = {}): MockDb {
                 const id = users.get(String(args[0]))
                 return (id ? { id } : null) as T | null
               }
+              if (sql.includes('SELECT password_hash FROM users')) {
+                return (options.accountHash ? { password_hash: options.accountHash } : null) as T | null
+              }
               if (sql.includes('SELECT value FROM app_meta')) {
                 const value = meta.get(String(args[0]))
                 return (value === undefined ? null : { value }) as T | null
               }
               if (sql.includes('COUNT(*) AS count'))
                 return { count: posts.length } as T | null
+              if (sql.includes('n.content'))
+                return (options.postDetail ?? null) as T | null
               return null as T | null
             },
             async run() {
@@ -81,6 +94,17 @@ function makeDb(options: DbOptions = {}): MockDb {
 
 function makeApp() {
   const app = new Hono<AppBindings>()
+  app.onError((err, c) => errorResponse(c, err))
+  app.route('/', blogRoutes)
+  return app
+}
+
+function makeAuthedApp() {
+  const app = new Hono<AppBindings>()
+  app.use('*', async (c, next) => {
+    c.set('userId', 'u1')
+    await next()
+  })
   app.onError((err, c) => errorResponse(c, err))
   app.route('/', blogRoutes)
   return app
@@ -127,6 +151,19 @@ function env(db: MockDb): AppBindings['Bindings'] {
   return { DB: db } as unknown as AppBindings['Bindings']
 }
 
+function privatePostDetail() {
+  return {
+    id: 'n1',
+    title: 'Private',
+    excerpt: '',
+    created_at: 1700000000000,
+    updated_at: 1700000000000,
+    slug: 'private-post',
+    tag_names: 'blog-private',
+    content: 'hello',
+  }
+}
+
 describe('blog routes', () => {
   let passwordHash = ''
 
@@ -164,14 +201,51 @@ describe('blog routes', () => {
     expect(res.headers.get('set-cookie') ?? '').toContain('blog_session_u1=')
   })
 
-  it('returns 401 for a protected blog without a session cookie', async () => {
+  it('POST /:username/auth succeeds with the account password when no custom password is set', async () => {
+    const app = makeApp()
+    const res = await app.request(
+      '/alice/auth',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'secret' }),
+      },
+      env(makeDb({ users: { alice: 'u1' }, accountHash: passwordHash })),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect(res.headers.get('set-cookie') ?? '').toContain('blog_session_u1=')
+  })
+
+  it('returns 200 for a blog with a custom password but no session cookie (anonymous browses public)', async () => {
     const meta: MetaStore = new Map([['blog_password_hash:u1', passwordHash]])
     const app = makeApp()
     const res = await app.request('/alice/posts', {}, env(makeDb({ users: { alice: 'u1' }, meta })))
-    expect(res.status).toBe(401)
-    expect(await res.json()).toEqual({
-      error: { code: 'blog_auth_required', message: 'Blog authentication required' },
-    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ posts: [], page: 1, hasMore: false })
+  })
+
+  it('anonymous /posts serves the public tier', async () => {
+    const db = makeDb({ users: { alice: 'u1' } })
+    const app = makeApp()
+    const res = await app.request('/alice/posts', {}, env(db))
+    expect(res.status).toBe(200)
+    const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ?3 OFFSET ?4'))
+    expect(postsSql).toContain("= 'blog-public'")
+  })
+
+  it('a valid session on /posts serves the all tier', async () => {
+    const meta: MetaStore = new Map([['blog_session:u1:tok123', String(Date.now() + 60_000)]])
+    const db = makeDb({ users: { alice: 'u1' }, meta })
+    const app = makeApp()
+    const res = await app.request(
+      '/alice/posts',
+      { headers: { Cookie: 'blog_session_u1=tok123' } },
+      env(db),
+    )
+    expect(res.status).toBe(200)
+    const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ?3 OFFSET ?4'))
+    expect(postsSql).toContain("IN ('blog-public', 'blog-private')")
   })
 
   it('returns 200 for a protected blog with a valid session cookie', async () => {
@@ -212,6 +286,68 @@ describe('blog routes', () => {
     expect(await res.json()).toEqual({
       error: { code: 'invalid_credentials', message: 'Invalid blog password' },
     })
+  })
+
+  it('GET /settings reports hasCustomPassword true when a custom password is set', async () => {
+    const meta: MetaStore = new Map([['blog_password_hash:u1', passwordHash]])
+    const app = makeAuthedApp()
+    const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' }, meta })))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ hasCustomPassword: true, title: null })
+  })
+
+  it('GET /settings reports hasCustomPassword false when no custom password is set', async () => {
+    const app = makeAuthedApp()
+    const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' } })))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ hasCustomPassword: false, title: null })
+  })
+
+  it('PUT /settings with password null clears the custom password and re-hashes blog-private shares', async () => {
+    const meta: MetaStore = new Map([['blog_password_hash:u1', passwordHash]])
+    const db = makeDb({
+      users: { alice: 'u1' },
+      accountHash: passwordHash,
+      meta,
+      blogPrivateNoteIds: ['n1'],
+    })
+    const app = makeAuthedApp()
+    const res = await app.request(
+      '/settings',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: null }),
+      },
+      env(db),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+    expect(meta.get('blog_password_hash:u1')).toBe('')
+    expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(true)
+  })
+
+  it('posts/:slug returns 401 for a blog-private post without a session', async () => {
+    const db = makeDb({ users: { alice: 'u1' }, postDetail: privatePostDetail() })
+    const app = makeApp()
+    const res = await app.request('/alice/posts/private-post', {}, env(db))
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({
+      error: { code: 'blog_auth_required', message: 'Blog authentication required' },
+    })
+  })
+
+  it('posts/:slug returns 200 for a blog-private post with a session', async () => {
+    const meta: MetaStore = new Map([['blog_session:u1:tok123', String(Date.now() + 60_000)]])
+    const db = makeDb({ users: { alice: 'u1' }, meta, postDetail: privatePostDetail() })
+    const app = makeApp()
+    const res = await app.request(
+      '/alice/posts/private-post',
+      { headers: { Cookie: 'blog_session_u1=tok123' } },
+      env(db),
+    )
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ id: 'n1', slug: 'private-post', tags: ['blog-private'] })
   })
 
   it('share create/get responses omit blogPublished', async () => {

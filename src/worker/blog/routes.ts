@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { LIMITS } from '@shared/constants'
+import { BLOG_PRIVATE_TAG } from '@shared/blog/tags'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { readJson, requestClientIp } from '../lib/request'
@@ -15,6 +16,7 @@ import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie,
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
 } from './auth'
+import { getBlogPasswordHash, ensureBlogShare } from './publish'
 import {
   getBlogOwner, hasBlogPassword, listBlogPosts, getBlogPost,
   listBlogMoments, listBlogTimeline, listBlogTags, listPostsByTag,
@@ -27,10 +29,26 @@ blogRoutes.use('/settings', requireAuth)
 blogRoutes.get('/settings', async (c) => {
   const userId = c.get('userId')
   return c.json({
-    hasPassword: await hasBlogPassword(c.env.DB, userId),
+    hasCustomPassword: await hasBlogPassword(c.env.DB, userId),
     title: await getBlogTitle(c.env.DB, userId),
   })
 })
+
+async function rehashBlogPrivateShares(db: D1Database, userId: string): Promise<void> {
+  const newHash = await getBlogPasswordHash(db, userId)
+  const { results } = await db
+    .prepare(
+      `SELECT n.id FROM notes n
+        JOIN note_tags nt ON nt.note_id = n.id
+        JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
+       WHERE n.user_id = ?1 AND n.deleted_at IS NULL AND t.name = 'blog-private'`,
+    )
+    .bind(userId)
+    .all<{ id: string }>()
+  for (const row of results) {
+    await ensureBlogShare(db, userId, row.id, 'private', newHash)
+  }
+}
 
 blogRoutes.put('/settings', async (c) => {
   const userId = c.get('userId')
@@ -41,6 +59,7 @@ blogRoutes.put('/settings', async (c) => {
     }
     if (body.password === null || body.password === '') await clearBlogPassword(c.env.DB, userId)
     else await setBlogPassword(c.env.DB, userId, body.password)
+    await rehashBlogPrivateShares(c.env.DB, userId)
   }
   if (body.title !== undefined) await setBlogTitle(c.env.DB, userId, body.title)
   return c.json({ ok: true })
@@ -104,49 +123,45 @@ blogRoutes.get('/:username/meta', async (c) => {
 
 blogRoutes.use('/:username/*', blogAuthMiddleware)
 
-const publicOnly = async (c: Context<AppBindings>) =>
-  !(await hasBlogPassword(c.env.DB, c.get('blogOwnerId')!))
+const requestTier = (c: Context<AppBindings>) => (c.get('blogAuthed') ? 'all' : 'public')
 
 blogRoutes.get('/:username/posts', async (c) => {
   const userId = c.get('blogOwnerId')!
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)
   const limit = Math.min(50, Math.max(1, parseInt(c.req.query('limit') ?? '10', 10) || 10))
-  const onlyPublic = await publicOnly(c)
-  return c.json(await listBlogPosts(c.env.DB, userId, onlyPublic, page, limit))
+  return c.json(await listBlogPosts(c.env.DB, userId, requestTier(c), page, limit))
 })
 
 blogRoutes.get('/:username/posts/:slug', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const onlyPublic = await publicOnly(c)
-  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), onlyPublic)
+  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), 'all')
   if (!post) return c.json({ error: { code: 'not_found', message: 'Post not found' } }, 404)
+  if (post.tags.includes(BLOG_PRIVATE_TAG) && !c.get('blogAuthed')) {
+    return c.json({ error: { code: 'blog_auth_required', message: 'Blog authentication required' } }, 401)
+  }
   return c.json(post)
 })
 
 blogRoutes.get('/:username/moments', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const onlyPublic = await publicOnly(c)
-  const moments = await listBlogMoments(c.env.DB, userId, onlyPublic)
+  const moments = await listBlogMoments(c.env.DB, userId, requestTier(c))
   return c.json({ moments })
 })
 
 blogRoutes.get('/:username/timeline', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const onlyPublic = await publicOnly(c)
-  const items = await listBlogTimeline(c.env.DB, userId, onlyPublic)
+  const items = await listBlogTimeline(c.env.DB, userId, requestTier(c))
   return c.json({ items })
 })
 
 blogRoutes.get('/:username/tags', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const onlyPublic = await publicOnly(c)
-  const tags = await listBlogTags(c.env.DB, userId, onlyPublic)
+  const tags = await listBlogTags(c.env.DB, userId, requestTier(c))
   return c.json({ tags })
 })
 
 blogRoutes.get('/:username/tags/:name', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const onlyPublic = await publicOnly(c)
-  const posts = await listPostsByTag(c.env.DB, userId, c.req.param('name'), onlyPublic)
+  const posts = await listPostsByTag(c.env.DB, userId, c.req.param('name'), requestTier(c))
   return c.json({ name: c.req.param('name'), posts })
 })

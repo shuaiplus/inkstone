@@ -14,7 +14,11 @@ interface MockDb {
 
 type MetaStore = Map<string, string>
 
-function makeMetaDb(store: MetaStore): MockDb {
+interface MetaDbOptions {
+  accountHash?: string
+}
+
+function makeMetaDb(store: MetaStore, options: MetaDbOptions = {}): MockDb {
   return {
     prepare(sql: string) {
       if (sql.includes('INSERT INTO app_meta')) {
@@ -29,6 +33,23 @@ function makeMetaDb(store: MetaStore): MockDb {
               },
               async run() {
                 store.set(String(args[0]), String(args[1]))
+                return { success: true }
+              },
+            }
+          },
+        }
+      }
+      if (sql.includes('SELECT password_hash FROM users')) {
+        return {
+          bind(...args: unknown[]) {
+            return {
+              async all<T = unknown>() {
+                return { results: [] as T[] }
+              },
+              async first<T = unknown>() {
+                return (options.accountHash ? { password_hash: options.accountHash } : null) as T | null
+              },
+              async run() {
                 return { success: true }
               },
             }
@@ -74,6 +95,10 @@ function mockDbNoMeta(): MockDb {
   return makeMetaDb(new Map())
 }
 
+function mockDbWithAccountPassword(): MockDb {
+  return makeMetaDb(new Map(), { accountHash: passwordHash })
+}
+
 function mockDbWithPassword(): MockDb {
   return makeMetaDb(sharedStore)
 }
@@ -82,6 +107,7 @@ function mockContext(overrides: { ownerId?: string; cookie?: string; db: MockDb 
   const headers = new Headers()
   if (overrides.cookie) headers.set('Cookie', overrides.cookie)
   const json = vi.fn((body: unknown, status?: number) => ({ body, status }))
+  const set = vi.fn()
   const c = {
     req: {
       url: 'https://blog.example.com/',
@@ -89,25 +115,37 @@ function mockContext(overrides: { ownerId?: string; cookie?: string; db: MockDb 
     },
     env: { DB: overrides.db },
     get: (key: string) => (key === 'blogOwnerId' ? overrides.ownerId : undefined),
+    set,
     json,
   }
   const next = vi.fn(async () => {})
-  return { c, next, json }
+  return { c, next, json, set }
 }
 
 describe('blog auth', () => {
-  it('returns null when no password is set', async () => {
+  it('returns null when no custom password and no account password exist', async () => {
     expect(await handleBlogAuth(mockDbNoMeta(), 'u1', 'secret')).toBeNull()
   })
 
-  it('returns null for wrong password', async () => {
-    expect(await handleBlogAuth(mockDbWithPassword(), 'u1', 'wrong')).toBeNull()
+  it('succeeds with the account password when no custom password is set', async () => {
+    const db = mockDbWithAccountPassword()
+    const token = await handleBlogAuth(db, 'u1', 'secret')
+    expect(token).toBeTruthy()
+    expect(await validateBlogSession(db, 'u1', token!)).toBe(true)
   })
 
-  it('returns a token for correct password and validates it', async () => {
+  it('succeeds with the custom password', async () => {
     const token = await handleBlogAuth(mockDbWithPassword(), 'u1', 'secret')
     expect(token).toBeTruthy()
     expect(await validateBlogSession(mockDbWithPassword(), 'u1', token!)).toBe(true)
+  })
+
+  it('returns null for the wrong custom password', async () => {
+    expect(await handleBlogAuth(mockDbWithPassword(), 'u1', 'wrong')).toBeNull()
+  })
+
+  it('returns null for the wrong account password', async () => {
+    expect(await handleBlogAuth(mockDbWithAccountPassword(), 'u1', 'wrong')).toBeNull()
   })
 
   it('rejects invalid or expired tokens', async () => {
@@ -119,29 +157,26 @@ describe('blog auth', () => {
     expect(await validateBlogSession(db, 'u1', 'old')).toBe(false)
   })
 
-  it('blogAuthMiddleware returns 401 for a bogus session cookie', async () => {
-    const { c, next, json } = mockContext({
+  it('blogAuthMiddleware sets blogAuthed=false for a bogus session cookie and continues', async () => {
+    const { c, next, set } = mockContext({
       ownerId: 'u1',
       cookie: 'blog_session_u1=bogus',
       db: mockDbWithPassword(),
     })
-    const res = await blogAuthMiddleware(c, next)
-    expect(json).toHaveBeenCalledWith(
-      { error: { code: 'blog_auth_required', message: 'Blog authentication required' } },
-      401,
-    )
-    expect(next).not.toHaveBeenCalled()
-    expect(res).toBeTruthy()
+    await blogAuthMiddleware(c, next)
+    expect(set).toHaveBeenCalledWith('blogAuthed', false)
+    expect(next).toHaveBeenCalled()
   })
 
-  it('blogAuthMiddleware allows a valid session cookie through', async () => {
+  it('blogAuthMiddleware sets blogAuthed=true for a valid session cookie and continues', async () => {
     const token = await handleBlogAuth(mockDbWithPassword(), 'u1', 'secret')
-    const { c, next } = mockContext({
+    const { c, next, set } = mockContext({
       ownerId: 'u1',
       cookie: `blog_session_u1=${token}`,
       db: mockDbWithPassword(),
     })
     await blogAuthMiddleware(c, next)
+    expect(set).toHaveBeenCalledWith('blogAuthed', true)
     expect(next).toHaveBeenCalled()
   })
 })

@@ -5,7 +5,6 @@ import { getMeta, setMeta } from '../db/metadata'
 import type { AppBindings } from '../env'
 import { newId } from '../lib/id'
 import { hashPassword, verifyPassword } from '../lib/password'
-import { hasBlogPassword } from './queries'
 
 export const BLOG_SESSION_PREFIX = 'blog_session:'
 export const BLOG_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -51,9 +50,12 @@ export async function handleBlogAuth(
   userId: string,
   password: string,
 ): Promise<string | null> {
-  const stored = await getMeta(db, BLOG_PASSWORD_KEY(userId))
-  if (!stored) return null
-  if (!(await verifyPassword(password, stored))) return null
+  try {
+    const stored = await getBlogPasswordHash(db, userId)
+    if (!(await verifyPassword(password, stored))) return null
+  } catch {
+    return null
+  }
   const token = newId()
   await setMeta(db, `${BLOG_SESSION_PREFIX}${userId}:${token}`, String(Date.now() + BLOG_SESSION_TTL_MS))
   return token
@@ -82,12 +84,7 @@ export function setBlogSessionCookie(c: Context<AppBindings>, userId: string, to
 export const blogAuthMiddleware = createMiddleware<AppBindings>(async (c, next) => {
   const ownerId = c.get('blogOwnerId')
   const token = ownerId ? getCookie(c, BLOG_SESSION_COOKIE(ownerId)) : undefined
-  if (
-    ownerId &&
-    (await hasBlogPassword(c.env.DB, ownerId)) &&
-    !(token && (await validateBlogSession(c.env.DB, ownerId, token)))
-  ) {
-    return c.json({ error: { code: 'blog_auth_required', message: 'Blog authentication required' } }, 401)
-  }
+  const authed = Boolean(ownerId && token && (await validateBlogSession(c.env.DB, ownerId, token)))
+  c.set('blogAuthed', authed)
   await next()
 })

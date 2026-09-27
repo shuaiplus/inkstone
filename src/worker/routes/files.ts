@@ -15,7 +15,6 @@ import {
 } from '../attachments/keys'
 import { persistAttachmentWithinQuota } from '../attachments/storage'
 import { BLOG_SESSION_COOKIE, validateBlogSession } from '../blog/auth'
-import { hasBlogPassword } from '../blog/queries'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { isValidId, isValidSlug, newId } from '../lib/id'
@@ -213,7 +212,6 @@ filesRoutes.post('/', requireAuth, async (c) => {
 
 
 async function blogFileAccess(c: Context<AppBindings>, userId: string): Promise<boolean> {
-  if (!(await hasBlogPassword(c.env.DB, userId))) return false
   const token = getCookie(c, BLOG_SESSION_COOKIE(userId))
   return Boolean(token && (await validateBlogSession(c.env.DB, userId, token)))
 }
