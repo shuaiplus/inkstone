@@ -64,7 +64,12 @@ export function setBlogSessionCookie(c: Context<AppBindings>, userId: string, to
 
 export const blogAuthMiddleware = createMiddleware<AppBindings>(async (c, next) => {
   const ownerId = c.get('blogOwnerId')
-  if (ownerId && (await hasBlogPassword(c.env.DB, ownerId)) && !getCookie(c, BLOG_SESSION_COOKIE(ownerId))) {
+  const token = ownerId ? getCookie(c, BLOG_SESSION_COOKIE(ownerId)) : undefined
+  if (
+    ownerId &&
+    (await hasBlogPassword(c.env.DB, ownerId)) &&
+    !(token && (await validateBlogSession(c.env.DB, ownerId, token)))
+  ) {
     return c.json({ error: { code: 'blog_auth_required', message: 'Blog authentication required' } }, 401)
   }
   await next()
