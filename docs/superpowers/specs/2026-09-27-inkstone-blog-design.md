@@ -21,7 +21,7 @@ The goal is a blog publishing channel where a user can designate specific notes 
 4. **Moments.** Notes inside the user's root-level folder named `Moments` (`folders.name = 'Moments' AND folders.parent_id IS NULL AND folders.deleted_at IS NULL`) that are also published to the blog appear in the blog's Moments area as short, title-less cards. If no such folder or no moments, the Moments area is hidden.
 5. **Timeline.** A time-grouped listing of blog posts (grouped by year), using the share/note creation time.
 6. **Styling.** Blog UI is a distinct, pleasant theme inspired by Rin / Hugo; article detail rendering reuses Inkstone's existing Markdown pipeline (markdown-it + `enhancePreview` + Mermaid + attachment share-parameter injection).
-7. **Scope exclusion.** Comments, blogroll, RSS/Atom, SEO/OpenGraph, featured-image extraction, and GitHub-OAuth authoring are out of scope for this phase to keep the merge surface small. Blog password management lives in the share panel.
+7. **Scope exclusion.** Comments, blogroll, RSS/Atom, SEO/OpenGraph, featured-image extraction, and GitHub-OAuth authoring are out of scope for this phase to keep the merge surface small. Blog password and title are managed in a new "Blog" tab in the existing Settings panel (account-level configuration), following the established tab pattern (`sections.ts` + `SettingsPanel.tsx`).
 8. **Multi-account correctness.** Blog listings are always scoped by `shares.user_id` matching the blog owner. Blog session cookies are scoped per blog owner.
 
 ## Architecture
@@ -39,7 +39,9 @@ CREATE INDEX IF NOT EXISTS idx_shares_blog ON shares(user_id, blog_published, cr
 - All other blog data (slug, note id, user id, password hash, expiry, timestamps) comes from existing `shares` columns.
 - `REQUIRED_COLUMNS` and `REQUIRED_TABLES`/`REQUIRED_INDEXES` in `src/worker/db/schema.ts` are updated accordingly.
 
-Per-user blog password is stored in the existing `app_meta` table with a user-scoped key: `blog_password_hash:<userId>` (scrypt hash via existing `hashPassword`/`verifyPassword`).
+Per-user blog settings are stored in the existing `app_meta` table with user-scoped keys:
+- `blog_password_hash:<userId>` — scrypt hash of the blog password (via existing `hashPassword`/`verifyPassword`); absent/empty string means public blog.
+- `blog_title:<userId>` — optional blog title (defaults to `username`'s blog).
 
 ### Server (`src/worker/blog/`)
 
@@ -63,7 +65,7 @@ New isolated directory `src/worker/blog/`:
   - `GET /api/blog/:username/posts`, `/posts/:slug`, `/moments`, `/timeline`, `/tags` — public read endpoints (no Inkstone session), gated by `blogAuthMiddleware` when the owner has a password set.
   - Mounted in `app.ts` at `/api/blog`.
 - Note on global middleware: `app.use('/api/*', requireClientHeader)` only enforces the `X-Inkstone-Client: 1` header for non-GET/HEAD/OPTIONS methods (`src/worker/middleware/auth.ts`). Blog public read endpoints are all GET → no header required. Only `POST /api/blog/:username/auth` and authenticated settings endpoints (`PUT/GET`) require the header; the blog frontend sends it, consistent with the rest of the UI. `loadSession` is also global on `/api/*` but is optional (does not block anonymous).
-- Blog password settings endpoints use the Inkstone session (`requireAuth`) and are registered on `blogRoutes` **before** `blogAuthMiddleware`, so they are reachable only by the logged-in owner: `PUT /api/blog/settings` (set/clear password), `GET /api/blog/settings` (has password).
+- Blog password settings endpoints use the Inkstone session (`requireAuth`) and are registered on `blogRoutes` **before** `blogAuthMiddleware`, so they are reachable only by the logged-in owner: `PUT /api/blog/settings` (set/clear password, set title), `GET /api/blog/settings` (current password state + title).
 
 ### Modifying existing server files
 
@@ -89,7 +91,7 @@ Client API wrapper `src/client/blog/api.ts` (`fetch`-based, sends `X-Inkstone-Cl
 
 ### Authentication flows
 
-- **Blog owner sets a password:** from authenticated Inkstone UI (`PUT /api/blog/settings` with Inkstone session) or via share panel; stores scrypt hash in `app_meta[blog_password_hash:<userId>]`.
+- **Blog owner sets password/title:** from the authenticated Inkstone UI — a new "Blog" tab in Settings (`BlogSettings.tsx`), registered in `sections.ts` and `SettingsPanel.tsx` like the existing tabs. Calls `PUT/GET /api/blog/settings` with the Inkstone session.
 - **Visitor opens `/blog/:username`:**
   - Owner has no password → public blog; client loads with `onlyPublic = true` (only passwordless shares listed).
   - Owner has password → show password form; submit → `POST /api/blog/:username/auth` → blog-session cookie → client loads with full list.
@@ -132,6 +134,7 @@ src/client/blog/components/header.tsx
 src/client/blog/components/footer.tsx
 src/client/blog/components/feed-card.tsx
 src/client/blog/components/markdown.tsx
+src/client/features/settings/BlogSettings.tsx
 tests/blog-auth.test.ts
 tests/blog-queries.test.ts
 ```
@@ -144,6 +147,8 @@ tests/blog-queries.test.ts
 | `src/worker/routes/share.ts` | Accept `blogPublished`; include in `toShareInfo` |
 | `src/worker/app.ts` | Mount `/api/blog` |
 | `src/client/App.tsx` | `/blog/:username` branch, skip notebook load on blog paths |
+| `src/client/features/settings/sections.ts` | Add `blog` section to `SettingsSection`, `settingsLoaders`, `warmSettingsSection` |
+| `src/client/features/settings/SettingsPanel.tsx` | Add Blog tab to `SECTIONS` |
 | `src/client/features/share/SharePanel.tsx` | "Publish to blog" toggle |
 
 ## Explicitly Out of Scope
@@ -154,5 +159,5 @@ tests/blog-queries.test.ts
 
 ## Open Decisions (defaults chosen)
 
-- Blog password management UI surface: a "Blog" section in the share panel (`SharePanel`), next to the "Publish to blog" toggle. It calls `PUT/GET /api/blog/settings` with the Inkstone session.
+- Blog password/title management UI: a new "Blog" tab in the existing Settings panel (`BlogSettings.tsx`), registered in `sections.ts` + `SettingsPanel.tsx`, calling `PUT/GET /api/blog/settings` with the Inkstone session. The per-note "Publish to blog" toggle stays in `SharePanel` (note-level, calls the share endpoint with `blogPublished`).
 - Blog path identifier is `users.username` (unique); URL-encoding handled at routes.
