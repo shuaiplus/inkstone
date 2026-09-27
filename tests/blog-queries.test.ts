@@ -159,7 +159,7 @@ describe('blog queries', () => {
 
   it('listBlogPosts excludes expired shares', async () => {
     const db = mockDbWithExpiredShare()
-    const posts = await listBlogPosts(db, 'u1', false, 1, 10)
+    const posts = await listBlogPosts(db, 'u1', 'all', 1, 10)
     expect(posts.posts.map((p) => p.id)).not.toContain('expired-note')
     expect(hasSql(db, 'n.deleted_at IS NULL')).toBe(true)
     expect(hasSql(db, '(s.expires_at IS NULL OR s.expires_at > ?2)')).toBe(true)
@@ -167,28 +167,35 @@ describe('blog queries', () => {
 
   it('listBlogPosts excludes soft-deleted notes', async () => {
     const db = mockDbWithDeletedNote()
-    const posts = await listBlogPosts(db, 'u1', false, 1, 10)
+    const posts = await listBlogPosts(db, 'u1', 'all', 1, 10)
     expect(posts.posts.map((p) => p.id)).not.toContain('deleted-note')
     expect(hasSql(db, 'n.deleted_at IS NULL')).toBe(true)
   })
 
-  it('onlyPublic excludes password-protected shares', async () => {
+  it('tier public filters to blog-public tagged posts', async () => {
     const db = mockDbMixed()
-    const posts = await listBlogPosts(db, 'u1', true, 1, 10)
-    expect(posts.posts.map((p) => p.id)).not.toContain('private-note')
+    const posts = await listBlogPosts(db, 'u1', 'public', 1, 10)
     expect(posts.posts.map((p) => p.id)).toContain('public-note')
-    expect(hasSql(db, 's.password_hash IS NULL')).toBe(true)
+    expect(hasSql(db, "t2.name = 'blog-public'")).toBe(true)
+    expect(hasSql(db, "t2.name IN ('blog-public', 'blog-private')")).toBe(false)
+  })
+
+  it('tier all includes both blog-public and blog-private tags', async () => {
+    const db = mockDbMixed()
+    const posts = await listBlogPosts(db, 'u1', 'all', 1, 10)
+    expect(posts.posts.map((p) => p.id)).toContain('public-note')
+    expect(hasSql(db, "t2.name IN ('blog-public', 'blog-private')")).toBe(true)
   })
 
   it('getBlogPost by slug and unknown slug returns null', async () => {
-    const detail = await getBlogPost(mockDb(), 'u1', 'my-slug', false)
+    const detail = await getBlogPost(mockDb(), 'u1', 'my-slug', 'all')
     expect(detail?.slug).toBe('my-slug')
-    expect(await getBlogPost(mockDb(), 'u1', 'missing', false)).toBeNull()
+    expect(await getBlogPost(mockDb(), 'u1', 'missing', 'all')).toBeNull()
   })
 
   it('listBlogMoments returns moments from the root Moments folder', async () => {
     const db = mockDbWithMoments()
-    const moments = await listBlogMoments(db, 'u1', false)
+    const moments = await listBlogMoments(db, 'u1', 'all')
     expect(moments.map((m) => m.id)).toEqual(['moment-1', 'moment-2'])
     expect(moments[0]?.content).toBe('short note')
     expect(moments[0]?.slug).toBe('moment-1-slug')
@@ -198,7 +205,7 @@ describe('blog queries', () => {
 
   it('listBlogTimeline returns items with a year field', async () => {
     const db = mockDbWithTimeline()
-    const items = await listBlogTimeline(db, 'u1', false)
+    const items = await listBlogTimeline(db, 'u1', 'all')
     expect(items.map((i) => i.year)).toEqual(['2026', '2014'])
     expect(items[0]?.id).toBe('t-note')
     expect(items[0]?.slug).toBe('t-slug')
@@ -207,7 +214,7 @@ describe('blog queries', () => {
 
   it('listBlogTags returns tag counts', async () => {
     const db = mockDbWithTags()
-    const tags = await listBlogTags(db, 'u1', false)
+    const tags = await listBlogTags(db, 'u1', 'all')
     expect(tags).toEqual([
       { name: 'a', count: 2 },
       { name: 'b', count: 1 },
@@ -216,7 +223,7 @@ describe('blog queries', () => {
 
   it('listPostsByTag returns posts filtered by tag name', async () => {
     const db = mockDbWithPostsByTag()
-    const posts = await listPostsByTag(db, 'u1', 'tag', false)
+    const posts = await listPostsByTag(db, 'u1', 'tag', 'all')
     expect(posts.map((p) => p.id)).toEqual(['tagged-note'])
     expect(hasSql(db, 'COLLATE NOCASE')).toBe(true)
   })

@@ -17,6 +17,12 @@ const SHARE_POST_COLUMNS = `s.note_id AS id, n.title, n.excerpt, s.created_at, n
 
 const SHARE_POST_JOIN = ` FROM shares s JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id`
 
+const tierFilter = (tier: 'public' | 'all') =>
+  `AND EXISTS (SELECT 1 FROM note_tags nt2 JOIN tags t2 ON t2.id = nt2.tag_id
+                WHERE nt2.note_id = n.id AND t2.user_id = n.user_id AND t2.name ${
+                  tier === 'public' ? "= 'blog-public'" : "IN ('blog-public', 'blog-private')"
+                })`
+
 interface BlogPostRow {
   id: string
   title: string
@@ -54,14 +60,13 @@ export async function hasBlogPassword(db: D1Database, userId: string): Promise<b
 export async function listBlogPosts(
   db: D1Database,
   userId: string,
-  onlyPublic: boolean,
+  tier: 'public' | 'all',
   page: number,
   limit: number,
 ): Promise<BlogPostsResponse> {
   const now = Date.now()
   const offset = (page - 1) * limit
-  const passwordFilter = onlyPublic ? ` AND s.password_hash IS NULL` : ''
-  const where = `s.user_id = ?1 AND s.blog_published = 1 AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)${passwordFilter}`
+  const where = `s.user_id = ?1 ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)`
   const { results } = await db
     .prepare(`SELECT ${SHARE_POST_COLUMNS}${SHARE_POST_JOIN} WHERE ${where} ORDER BY s.created_at DESC LIMIT ?3 OFFSET ?4`)
     .bind(userId, now, limit, offset)
@@ -78,14 +83,13 @@ export async function getBlogPost(
   db: D1Database,
   userId: string,
   slug: string,
-  onlyPublic: boolean,
+  tier: 'public' | 'all',
 ): Promise<BlogPostDetail | null> {
   const now = Date.now()
-  const passwordFilter = onlyPublic ? ` AND s.password_hash IS NULL` : ''
   const row = await db
     .prepare(
       `SELECT ${SHARE_POST_COLUMNS}, n.content${SHARE_POST_JOIN}
-        WHERE s.user_id = ?2 AND s.blog_published = 1 AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?3)${passwordFilter} AND s.slug = ?1
+        WHERE s.user_id = ?2 ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?3) AND s.slug = ?1
         LIMIT 1`,
     )
     .bind(slug, userId, now)
@@ -97,15 +101,14 @@ export async function getBlogPost(
 export async function listBlogMoments(
   db: D1Database,
   userId: string,
-  onlyPublic: boolean,
+  tier: 'public' | 'all',
 ): Promise<MomentItem[]> {
-  const passwordFilter = onlyPublic ? ` AND s.password_hash IS NULL` : ''
   const { results } = await db
     .prepare(
       `SELECT n.id, n.content, n.created_at, s.slug AS slug, ${TAG_SUBQUERY}
          FROM notes n
          JOIN folders f ON f.id = n.folder_id AND f.name = 'Moments' AND f.parent_id IS NULL AND f.deleted_at IS NULL
-         JOIN shares s ON s.note_id = n.id AND s.user_id = n.user_id AND s.blog_published = 1 AND (s.expires_at IS NULL OR s.expires_at > ?2)${passwordFilter}
+         JOIN shares s ON s.note_id = n.id AND s.user_id = n.user_id ${tierFilter(tier)} AND (s.expires_at IS NULL OR s.expires_at > ?2)
         WHERE n.user_id = ?1 AND n.deleted_at IS NULL
         ORDER BY n.created_at DESC`,
     )
@@ -123,11 +126,10 @@ export async function listBlogMoments(
 export async function listBlogTimeline(
   db: D1Database,
   userId: string,
-  onlyPublic: boolean,
+  tier: 'public' | 'all',
 ): Promise<TimelineItem[]> {
   const now = Date.now()
-  const passwordFilter = onlyPublic ? ` AND s.password_hash IS NULL` : ''
-  const where = `s.user_id = ?1 AND s.blog_published = 1 AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)${passwordFilter}`
+  const where = `s.user_id = ?1 ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)`
   const { results } = await db
     .prepare(
       `SELECT s.note_id AS id, n.title, s.created_at, s.slug AS slug, strftime('%Y', datetime(s.created_at / 1000, 'unixepoch')) AS year
@@ -149,11 +151,10 @@ export async function listBlogTimeline(
 export async function listBlogTags(
   db: D1Database,
   userId: string,
-  onlyPublic: boolean,
+  tier: 'public' | 'all',
 ): Promise<BlogTag[]> {
   const now = Date.now()
-  const passwordFilter = onlyPublic ? ` AND s.password_hash IS NULL` : ''
-  const where = `s.user_id = ?1 AND s.blog_published = 1 AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)${passwordFilter}`
+  const where = `s.user_id = ?1 ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)`
   const { results } = await db
     .prepare(
       `SELECT t.name, COUNT(*) AS count
@@ -175,10 +176,9 @@ export async function listPostsByTag(
   db: D1Database,
   userId: string,
   tagName: string,
-  onlyPublic: boolean,
+  tier: 'public' | 'all',
 ): Promise<BlogPostSummary[]> {
   const now = Date.now()
-  const passwordFilter = onlyPublic ? ` AND s.password_hash IS NULL` : ''
   const { results } = await db
     .prepare(
       `SELECT ${SHARE_POST_COLUMNS}
@@ -186,7 +186,7 @@ export async function listPostsByTag(
          JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
          JOIN note_tags nt ON nt.note_id = n.id
          JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
-        WHERE s.user_id = ?1 AND s.blog_published = 1 AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2)${passwordFilter} AND t.name = ?3 COLLATE NOCASE
+        WHERE s.user_id = ?1 ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2) AND t.name = ?3 COLLATE NOCASE
         ORDER BY s.created_at DESC`,
     )
     .bind(userId, now, tagName)
