@@ -282,6 +282,10 @@
   color: var(--blog-accent);
 }
 
+.blog-icon-btn--quick {
+  display: none;
+}
+
 .blog-menu-toggle {
   display: inline-grid;
   place-items: center;
@@ -297,6 +301,20 @@
 
 .blog-menu-toggle:hover {
   background: var(--blog-accent-soft);
+}
+
+.blog-menu-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex: none;
+  margin-right: 10px;
+  color: var(--blog-text-faint);
+}
+
+.blog-menu-item--active .blog-menu-item-icon {
+  color: var(--blog-accent);
 }
 
 /* 6. Mobile menu ----------------------------------------------------------- */
@@ -316,7 +334,7 @@
   right: 0;
   bottom: 0;
   z-index: 71;
-  width: min(360px, 100vw);
+  width: min(176px, 100vw);
   background: var(--blog-bg);
   border-left: 1px solid var(--blog-border);
   overflow-y: auto;
@@ -699,7 +717,7 @@ a.blog-chip:hover {
 }
 
 .blog-post-header {
-  margin-bottom: 20px;
+  margin-bottom: 8px;
 }
 
 .blog-post-title {
@@ -716,7 +734,7 @@ a.blog-chip:hover {
   gap: 8px;
   color: var(--blog-text-faint);
   font-size: 13px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .blog-post-tags {
@@ -1088,6 +1106,68 @@ a.blog-chip:hover {
   line-height: 1.7;
 }
 
+.blog-moments-gate {
+  max-width: 480px;
+  margin: 0 auto 24px;
+  padding: 24px;
+  background: var(--blog-surface);
+  border: 1px solid var(--blog-border);
+  border-radius: var(--blog-radius);
+  text-align: center;
+}
+
+.blog-moments-gate-text {
+  margin: 0 0 16px;
+  color: var(--blog-text-soft);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.blog-moments-gate-form {
+  display: flex;
+  gap: 8px;
+}
+
+.blog-moments-gate-form input[type='password'] {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 16px;
+  font-size: 15px;
+  color: var(--blog-text);
+  background: var(--blog-surface-alt);
+  border: 1px solid var(--blog-border-strong);
+  border-radius: 999px;
+  outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.blog-moments-gate-form input[type='password']:focus {
+  border-color: var(--blog-accent);
+  box-shadow: 0 0 0 3px var(--blog-accent-soft);
+}
+
+.blog-moments-gate-form button {
+  flex: none;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--blog-accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.blog-moments-gate-form button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.blog-moments-gate-form button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 /* 17. Login ---------------------------------------------------------------- */
 
 .blog-login {
@@ -1326,6 +1406,10 @@ a.blog-chip:hover {
 }
 
 @media (max-width: 767px) {
+  .blog-icon-btn--quick {
+    display: inline-grid;
+  }
+
   .blog-post-nav {
     flex-direction: column;
   }

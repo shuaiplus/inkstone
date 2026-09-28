@@ -2,8 +2,8 @@
 import { blogApi } from '../api'
 import type { BlogMomentsResponse, MomentItem } from '@shared/blog/types'
 import { BlogMarkdown } from '../components/markdown'
-import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { visibleTags } from '../filter-tags'
 import { t } from '../../lib/i18n'
 
 function formatDate(ts: number): string {
@@ -33,7 +33,7 @@ export default function MomentsPage({ username }: {
   }, [data, page])
 
   if (status === 'auth')
-    return <LoginPage username={username} />
+    return <div className="blog-loading">{t('blog.loading')}</div>
   if (page === 1 && (status === 'loading' || !data))
     return <div className="blog-loading">{t('blog.loading')}</div>
   if (status === 'error' || !data)
@@ -52,23 +52,26 @@ export default function MomentsPage({ username }: {
         <p className="blog-empty">{t('blog.no_moments')}</p>
       ) : (
         <div className="blog-moments-feed">
-          {moments.map((moment) => (
-            <article key={moment.id} className="blog-moment">
-              <div className="blog-moment-time">
-                {formatDate(moment.created_at)}
-              </div>
-              {moment.tags.length > 0 && (
-                <div className="blog-moment-tags">
-                  {moment.tags.map((tag) => (
-                    <span key={tag} className="blog-chip blog-chip--sm blog-chip--static">{tag}</span>
-                  ))}
+          {moments.map((moment) => {
+            const tags = visibleTags(moment.tags)
+            return (
+              <article key={moment.id} className="blog-moment">
+                <div className="blog-moment-time">
+                  {formatDate(moment.created_at)}
                 </div>
-              )}
-              <div className="blog-moment-body">
-                <BlogMarkdown content={moment.content} slug={moment.slug} />
-              </div>
-            </article>
-          ))}
+                {tags.length > 0 && (
+                  <div className="blog-moment-tags">
+                    {tags.map((tag) => (
+                      <span key={tag} className="blog-chip blog-chip--sm blog-chip--static">{tag}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="blog-moment-body">
+                  <BlogMarkdown content={moment.content} slug={moment.slug} />
+                </div>
+              </article>
+            )
+          })}
         </div>
       )}
       {hasMore && (

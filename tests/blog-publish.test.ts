@@ -160,9 +160,16 @@ describe('blog publish', () => {
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
   })
 
-  it('syncBlogShare treats a Moments-folder note as blog-private without any blog tag', async () => {
+  it('syncBlogShare treats a Moments-folder note as blog-public without any blog tag', async () => {
     const db = publishMockDb({ accountHash: 'acct-hash' })
     await syncBlogShare(db, 'u1', 'n1', [], { inMoments: true })
+    expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(true)
+    expect(argsFor(db, 'UPDATE shares SET password_hash')[0]![0]).toBeNull()
+  })
+
+  it('syncBlogShare treats a Moments-folder note as blog-private when it has the blog-private tag', async () => {
+    const db = publishMockDb({ accountHash: 'acct-hash' })
+    await syncBlogShare(db, 'u1', 'n1', ['blog-private'], { inMoments: true })
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(true)
     expect(argsFor(db, 'UPDATE shares SET password_hash')[0]![0]).toBe('acct-hash')
   })
@@ -174,11 +181,11 @@ describe('blog publish', () => {
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
   })
 
-  it('reconcileMomentsShares creates private shares for existing Moments-folder notes', async () => {
+  it('reconcileMomentsShares creates public shares for untagged Moments-folder notes', async () => {
     const db = makeDb([
       ['app_meta', async () => ({ first: null })],
       ['SELECT DISTINCT n.user_id', async () => ({ all: [{ user_id: 'u1' }] })],
-      ['SELECT n.id AS id FROM notes', async () => ({ all: [{ id: 'n1' }] })],
+      ['SELECT n.id AS id, (SELECT GROUP_CONCAT', async () => ({ all: [{ id: 'n1', tag_names: null }] })],
       ['FROM users', async () => ({ first: { password_hash: 'acct-hash' } })],
     ])
     await reconcileMomentsShares(db)
@@ -186,7 +193,7 @@ describe('blog publish', () => {
     const insertArgs = argsFor(db, 'INSERT OR IGNORE INTO shares')[0]!
     expect(insertArgs[1]).toBe('n1')
     expect(insertArgs[2]).toBe('u1')
-    expect(insertArgs[3]).toBe('acct-hash')
+    expect(insertArgs[3]).toBeNull()
   })
 
   it('syncBlogShare ensures a public share for the blog-public tag', async () => {

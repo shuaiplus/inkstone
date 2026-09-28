@@ -1,5 +1,6 @@
 import type { BlogPostSummary } from '@shared/blog/types'
 import { coverSrc } from '../cover'
+import { visibleTags } from '../filter-tags'
 
 function formatDate(ts: number): string {
   if (!Number.isFinite(ts) || !ts)
@@ -16,6 +17,7 @@ export function FeedCard({ post, username }: {
   const base = `/blog/${encodeURIComponent(username)}`
   const cover = coverSrc(post)
   const href = `${base}/posts/${encodeURIComponent(post.slug)}`
+  const tags = visibleTags(post.tags)
   return (
     <article className="blog-feed-card">
       <a className="blog-feed-card-link" href={href} aria-label={post.title}>
@@ -25,9 +27,9 @@ export function FeedCard({ post, username }: {
             <time dateTime={new Date(post.created_at).toISOString()}>{formatDate(post.created_at)}</time>
           </div>
           {post.excerpt && <p className="blog-feed-card-excerpt">{post.excerpt}</p>}
-          {post.tags.length > 0 && (
+          {tags.length > 0 && (
             <div className="blog-feed-card-tags">
-              {post.tags.map((tag) => (
+              {tags.map((tag) => (
                 <span key={tag} className="blog-chip blog-chip--sm blog-chip--static">{tag}</span>
               ))}
             </div>

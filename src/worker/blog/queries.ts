@@ -7,10 +7,28 @@ import type {
   BlogTag,
   BlogTimelineResponse,
 } from '@shared/blog/types'
-import { firstImageSrc } from '@shared/markdown-utils'
+import { firstImageSrc, parseFrontMatter } from '@shared/markdown-utils'
 import { getMeta } from '../db/metadata'
 import { splitTags } from '../db/rows'
 import { MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
+
+function frontMatterCreated(content: string | null | undefined): number | null {
+  if (!content) return null
+  try {
+    const { data } = parseFrontMatter(content)
+    const v = data?.created
+    if (v == null) return null
+    if (v instanceof Date) return v.getTime()
+    if (typeof v === 'number') return v > 1e12 ? v : v * 1000
+    if (typeof v === 'string') {
+      const ms = Date.parse(v)
+      return Number.isNaN(ms) ? null : ms
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
 
 const TAG_SUBQUERY = `(SELECT GROUP_CONCAT(t.name, char(1)) FROM note_tags nt
      JOIN tags t ON t.id = nt.tag_id
@@ -42,7 +60,7 @@ function toBlogPostSummary(row: BlogPostRow): BlogPostSummary {
     id: row.id,
     title: row.title,
     excerpt: row.excerpt,
-    created_at: row.created_at,
+    created_at: frontMatterCreated(row.content) ?? row.created_at,
     updated_at: row.updated_at,
     slug: row.slug,
     tags: splitTags(row.tag_names),
@@ -149,8 +167,8 @@ export async function listBlogMoments(
   const now = Date.now()
   const offset = (page - 1) * limit
   const publicOnly = tier === 'public'
-    ? `AND EXISTS (SELECT 1 FROM note_tags nt2 JOIN tags t2 ON t2.id = nt2.tag_id
-                    WHERE nt2.note_id = n.id AND t2.user_id = n.user_id AND t2.name = 'blog-public')`
+    ? `AND NOT EXISTS (SELECT 1 FROM note_tags nt2 JOIN tags t2 ON t2.id = nt2.tag_id
+                    WHERE nt2.note_id = n.id AND t2.user_id = n.user_id AND t2.name = 'blog-private')`
     : ''
   const from = `FROM notes n
      JOIN folders f ON f.id = n.folder_id AND f.name = ?3 AND f.parent_id IS NULL AND f.deleted_at IS NULL
@@ -176,7 +194,7 @@ export async function listBlogMoments(
     moments: results.map((row) => ({
       id: row.id,
       content: row.content,
-      created_at: row.created_at,
+      created_at: frontMatterCreated(row.content) ?? row.created_at,
       slug: row.slug,
       tags: splitTags(row.tag_names),
     })),
@@ -198,27 +216,30 @@ export async function listBlogTimeline(
   const where = `s.user_id = ?1 ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?2) ${excludeMoments}`
   const { results } = await db
     .prepare(
-      `SELECT s.note_id AS id, n.title, s.created_at, s.slug AS slug, strftime('%Y', datetime(s.created_at / 1000, 'unixepoch')) AS year
+      `SELECT s.note_id AS id, n.title, s.created_at, s.slug AS slug, n.content AS content
        ${SHARE_POST_JOIN}
         WHERE ${where}
         ORDER BY s.created_at DESC, s.note_id DESC
         LIMIT ?3 OFFSET ?4`,
     )
     .bind(userId, now, limit, offset)
-    .all<{ id: string; title: string; created_at: number; slug: string; year: string }>()
+    .all<{ id: string; title: string; created_at: number; slug: string; content: string }>()
   const count = await db
     .prepare(`SELECT COUNT(*) AS count${SHARE_POST_JOIN} WHERE ${where}`)
     .bind(userId, now)
     .first<{ count: number }>()
   const total = count?.count ?? 0
   return {
-    items: results.map((row) => ({
-      id: row.id,
-      title: row.title,
-      created_at: row.created_at,
-      year: row.year,
-      slug: row.slug,
-    })),
+    items: results.map((row) => {
+      const created = frontMatterCreated(row.content) ?? row.created_at
+      return {
+        id: row.id,
+        title: row.title,
+        created_at: created,
+        year: new Date(created).getFullYear().toString(),
+        slug: row.slug,
+      }
+    }),
     page,
     hasMore: page * limit < total,
   }

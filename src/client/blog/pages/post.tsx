@@ -4,6 +4,7 @@ import { BlogMarkdown } from '../components/markdown'
 import { TableOfContents } from '../components/toc'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { visibleTags } from '../filter-tags'
 import { t } from '../../lib/i18n'
 
 function formatDate(ts: number): string {
@@ -44,6 +45,7 @@ export default function PostPage({ username, slug }: {
     )
 
   const base = `/blog/${encodeURIComponent(username)}`
+  const tags = visibleTags(data.tags)
   return (
     <div className="blog-post-page">
       <div className="blog-post-content">
@@ -53,9 +55,9 @@ export default function PostPage({ username, slug }: {
             <div className="blog-post-meta">
               <time dateTime={new Date(data.created_at).toISOString()}>{formatDate(data.created_at)}</time>
             </div>
-            {data.tags.length > 0 && (
+            {tags.length > 0 && (
               <div className="blog-post-tags">
-                {data.tags.map((tag) => (
+                {tags.map((tag) => (
                   <a key={tag} className="blog-chip blog-chip--sm" href={`${base}/tags/${encodeURIComponent(tag)}`}>
                     {tag}
                   </a>

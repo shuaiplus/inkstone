@@ -469,7 +469,7 @@ describe('blog routes', () => {
     })
   })
 
-  it('GET /:username/moments returns the paged moments response', async () => {
+  it('GET /:username/moments returns the paged moments response without a session', async () => {
     const app = makeApp()
     const res = await app.request('/alice/moments', {}, env(makeDb({ users: { alice: 'u1' } })))
     expect(res.status).toBe(200)

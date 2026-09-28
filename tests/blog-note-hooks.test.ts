@@ -208,7 +208,7 @@ describe('blog note hooks', () => {
     expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
   })
 
-  it('CREATE in the Moments folder ensures a private blog share without any tag', async () => {
+  it('CREATE in the Moments folder ensures a public blog share without any tag', async () => {
     const db = makeDb({ accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, '/api/notes', {
@@ -219,7 +219,7 @@ describe('blog note hooks', () => {
     expect(res.status).toBe(201)
     expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
     const updateIndex = db.preparedSqls.findIndex((sql) => sql.includes('UPDATE shares SET password_hash'))
-    expect(db.preparedArgs[updateIndex]?.[0]).toBe('acct-hash')
+    expect(db.preparedArgs[updateIndex]?.[0]).toBeNull()
   })
 
   it('PATCH moving a plain note into the Moments folder creates a private blog share', async () => {

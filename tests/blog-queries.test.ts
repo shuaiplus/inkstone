@@ -123,10 +123,10 @@ function mockDbWithMoments(): MockDb {
 
 function mockDbWithTimeline(): MockDb {
   return makeDb([
-    ["strftime('%Y'", async () => ({
+    ['n.content AS content', async () => ({
       all: [
-        { id: 't-note', title: 'Timeline post', created_at: 1_700_000_000_000, year: '2026', slug: 't-slug' },
-        { id: 'old-note', title: 'Older post', created_at: 1_400_000_000_000, year: '2014', slug: 'old-slug' },
+        { id: 't-note', title: 'Timeline post', created_at: Date.UTC(2026, 0, 1), slug: 't-slug', content: '' },
+        { id: 'old-note', title: 'Older post', created_at: Date.UTC(2014, 0, 1), slug: 'old-slug', content: '' },
       ],
     })],
   ])
@@ -238,10 +238,10 @@ describe('blog queries', () => {
     expect(hasSql(db, "t2.name = 'blog-public'")).toBe(false)
   })
 
-  it('listBlogMoments gates implicit-private moments behind the blog session', async () => {
+  it('listBlogMoments excludes blog-private moments in the public tier', async () => {
     const db = mockDbWithMoments()
     await listBlogMoments(db, 'u1', 'public', 1, 20)
-    expect(hasSql(db, "t2.name = 'blog-public'")).toBe(true)
+    expect(hasSql(db, "t2.name = 'blog-private'")).toBe(true)
   })
 
   it('listBlogTimeline returns items with a year field', async () => {
@@ -251,7 +251,6 @@ describe('blog queries', () => {
     expect(items.items[0]?.id).toBe('t-note')
     expect(items.items[0]?.slug).toBe('t-slug')
     expect(items.hasMore).toBe(false)
-    expect(hasSql(db, "strftime('%Y'")).toBe(true)
   })
 
   it('listBlogTags returns tag counts', async () => {

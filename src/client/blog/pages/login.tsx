@@ -83,12 +83,15 @@ export default function LoginPage({ username }: {
         {error && <p className="blog-login-error" role="alert">{error}</p>}
         <div className="blog-login-actions">
           <a className="blog-login-ghost" href={base}>
-            {t('blog.close')}
+            {t('blog.articles')}
           </a>
-          <button type="button" className="blog-login-ghost" disabled={busy} onClick={onLogout}>
-            {busy ? t('blog.logging_out') : t('blog.logout')}
-          </button>
+          <a className="blog-login-ghost" href={`${base}/moments`}>
+            {t('blog.moments')}
+          </a>
         </div>
+        <button type="button" className="blog-login-ghost" disabled={busy} onClick={onLogout}>
+          {busy ? t('blog.logging_out') : t('blog.logout')}
+        </button>
       </div>
     )
   }

@@ -24,14 +24,15 @@ export default function TagsPage({ username }: {
     )
 
   const base = `/blog/${encodeURIComponent(username)}`
+  const visible = data.tags.filter((tag) => !['blog-public', 'blog-private'].includes(tag.name))
   return (
     <div>
       <h1 className="blog-section-title">{t('blog.tags')}</h1>
-      {data.tags.length === 0 ? (
+      {visible.length === 0 ? (
         <p className="blog-empty">{t('blog.no_tags')}</p>
       ) : (
         <div className="blog-tag-cloud">
-          {data.tags.map((tag) => (
+          {visible.map((tag) => (
             <a key={tag.name} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag.name)}`}>
               {tag.name} <span className="blog-chip-count">{tag.count}</span>
             </a>
