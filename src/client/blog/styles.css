@@ -17,6 +17,7 @@
   --blog-radius: 10px;
   --blog-radius-sm: 6px;
   --blog-gutter: 24px;
+  --blog-card-pad: 24px;
   --blog-prose-max: 720px;
   --blog-page-max: 900px;
   --blog-bg-translucent: rgba(250, 249, 247, 0.86);
@@ -96,13 +97,17 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px var(--blog-gutter) 14px;
+  padding: 16px var(--blog-gutter) 8px;
 }
 
 .blog-header-left {
   min-width: 0;
   flex: 1;
-  margin-left: -48px;
+  /* 尽量左移出 168px，但不超出视口左缘（随窗口变窄自动收回） */
+  margin-left: max(
+    -36px,
+    calc((var(--blog-page-max) - 100vw) / 2 - var(--blog-gutter))
+  );
 }
 
 .blog-header-title {
@@ -230,14 +235,14 @@
 
 .blog-card-link {
   display: block;
-  padding: 22px 24px;
+  padding: 22px var(--blog-card-pad);
   color: inherit;
   text-decoration: none;
 }
 
 .blog-card-cover {
   display: block;
-  margin: -22px -24px 18px;
+  margin: -22px calc(var(--blog-card-pad) * -1) 18px;
   overflow: hidden;
 }
 
@@ -282,7 +287,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 0 24px 22px;
+  padding: 0 var(--blog-card-pad) 22px;
 }
 
 .blog-chip {
@@ -913,10 +918,19 @@
 }
 
 @media (max-width: 640px) {
+  :root {
+    --blog-gutter: 4px;
+    --blog-card-pad: 8px;
+  }
+
   .blog-header-inner {
     flex-direction: column;
     align-items: flex-start;
-    gap: 10px;
+    gap: 1px;
+  }
+
+  .blog-header-desc {
+    margin-top: 2px;
   }
 
   .blog-header-left {
@@ -942,8 +956,12 @@
     margin-left: auto;
   }
 
+  .blog-header-inner {
+    padding-bottom: 0px;
+  }
+
   .blog-main {
-    padding-top: 24px;
+    padding-top: 10px;
   }
 
   .blog-card-cover img {
