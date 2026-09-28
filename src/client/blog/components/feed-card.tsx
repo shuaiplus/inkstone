@@ -17,28 +17,28 @@ export function FeedCard({ post, username }: {
   const cover = coverSrc(post)
   const href = `${base}/posts/${encodeURIComponent(post.slug)}`
   return (
-    <article className="blog-card">
-      <a className="blog-card-link" href={href} aria-label={post.title}>
+    <article className="blog-feed-card">
+      <a className="blog-feed-card-link" href={href} aria-label={post.title}>
+        <div className="blog-feed-card-body">
+          <h2 className="blog-feed-card-title">{post.title}</h2>
+          <div className="blog-feed-card-meta">
+            <time dateTime={new Date(post.created_at).toISOString()}>{formatDate(post.created_at)}</time>
+          </div>
+          {post.excerpt && <p className="blog-feed-card-excerpt">{post.excerpt}</p>}
+          {post.tags.length > 0 && (
+            <div className="blog-feed-card-tags">
+              {post.tags.map((tag) => (
+                <span key={tag} className="blog-chip blog-chip--sm blog-chip--static">{tag}</span>
+              ))}
+            </div>
+          )}
+        </div>
         {cover && (
-          <div className="blog-card-cover" aria-hidden>
+          <div className="blog-feed-card-thumb">
             <img src={cover} alt="" loading="lazy" />
           </div>
         )}
-        <h2 className="blog-card-title">{post.title}</h2>
-        {post.excerpt && <p className="blog-card-excerpt">{post.excerpt}</p>}
-        <div className="blog-card-meta">
-          <time dateTime={new Date(post.created_at).toISOString()}>{formatDate(post.created_at)}</time>
-        </div>
       </a>
-      {post.tags.length > 0 && (
-        <div className="blog-card-tags">
-          {post.tags.map((tag) => (
-            <a key={tag} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag)}`}>
-              {tag}
-            </a>
-          ))}
-        </div>
-      )}
     </article>
   )
 }

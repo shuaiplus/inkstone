@@ -43,20 +43,20 @@ export default function PostPage({ username, slug }: {
       </div>
     )
 
-  const base = `/blog/` + encodeURIComponent(username)
+  const base = `/blog/${encodeURIComponent(username)}`
   return (
     <div className="blog-post-page">
       <div className="blog-post-content">
         <article className="blog-post">
           <header className="blog-post-header">
             <h1 className="blog-post-title">{data.title}</h1>
-            <div className="blog-card-meta">
+            <div className="blog-post-meta">
               <time dateTime={new Date(data.created_at).toISOString()}>{formatDate(data.created_at)}</time>
             </div>
             {data.tags.length > 0 && (
-              <div className="blog-card-tags">
+              <div className="blog-post-tags">
                 {data.tags.map((tag) => (
-                  <a key={tag} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag)}`}>
+                  <a key={tag} className="blog-chip blog-chip--sm" href={`${base}/tags/${encodeURIComponent(tag)}`}>
                     {tag}
                   </a>
                 ))}

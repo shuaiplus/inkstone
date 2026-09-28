@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderMarkdown } from '../../lib/markdown/renderer'
 import { enhancePreview, renderPendingMermaid } from '../../lib/markdown/enhance'
 import { t } from '../../lib/i18n'
+import { isBlogDark, onBlogThemeChange } from '../theme'
 
 function addShareAccess(html: string, slug: string): string {
   const template = document.createElement('template')
@@ -47,13 +48,10 @@ export function BlogMarkdown({ content, slug }: {
   slug: string
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+  const [dark, setDark] = useState(() => isBlogDark())
 
   useEffect(() => {
-    const mql = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => setDark(mql.matches)
-    mql.addEventListener('change', onChange)
-    return () => mql.removeEventListener('change', onChange)
+    return onBlogThemeChange(() => setDark(isBlogDark()))
   }, [])
 
   const html = useMemo(() => {

@@ -30,10 +30,10 @@ export default function TagsPage({ username }: {
       {data.tags.length === 0 ? (
         <p className="blog-empty">{t('blog.no_tags')}</p>
       ) : (
-        <div className="blog-card-tags">
+        <div className="blog-tag-cloud">
           {data.tags.map((tag) => (
             <a key={tag.name} className="blog-chip" href={`${base}/tags/${encodeURIComponent(tag.name)}`}>
-              {tag.name} ({tag.count})
+              {tag.name} <span className="blog-chip-count">{tag.count}</span>
             </a>
           ))}
         </div>

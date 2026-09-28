@@ -1,8 +1,9 @@
-import { Component, lazy, Suspense, useEffect, useState, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react'
 import { blogApi, BlogAuthError } from './api'
 import { BlogHeader } from './components/header'
 import { BlogFooter } from './components/footer'
 import { t } from '../lib/i18n'
+import { initialBlogTheme, saveBlogTheme, dispatchBlogTheme, type BlogTheme } from './theme'
 import './styles.css'
 
 const FeedPage = lazy(() => import('./pages/feed'))
@@ -76,6 +77,9 @@ export default function BlogApp({ username }: {
   username: string
 }) {
   const [path, setPath] = useState(() => window.location.pathname)
+  const [theme, setTheme] = useState<BlogTheme>(() => initialBlogTheme())
+  const appRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname)
     window.addEventListener('popstate', onPop)
@@ -99,6 +103,32 @@ export default function BlogApp({ username }: {
     return () => document.removeEventListener('click', onClick)
   }, [username])
 
+  useEffect(() => {
+    const app = appRef.current
+    if (!app) return
+    const onScroll = () => {
+      const max = app.scrollHeight - app.clientHeight
+      app.style.setProperty('--blog-progress', String(max > 0 ? app.scrollTop / max : 0))
+      const header = app.querySelector('.blog-header')
+      if (header) header.classList.toggle('is-scrolled', app.scrollTop > 4)
+    }
+    app.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => app.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next: BlogTheme = prev === 'dark' ? 'light' : 'dark'
+      saveBlogTheme(next)
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    dispatchBlogTheme(theme)
+  }, [theme])
+
   const { Component, props } = matchRoute(username, path)
   const [meta, setMeta] = useState<{ title?: string; description?: string | null }>(() => metaCache.get(username) ?? {})
   useEffect(() => {
@@ -114,12 +144,24 @@ export default function BlogApp({ username }: {
     return () => { cancelled = true }
   }, [username])
   return (
-    <div className="blog-app">
-      <BlogHeader username={username} title={meta.title} description={meta.description} />
+    <div ref={appRef} className="blog-app" data-theme={theme}>
+      <div className="blog-read-progress" aria-hidden />
+      <BlogHeader
+        username={username}
+        title={meta.title}
+        path={path}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
       <main className="blog-main">
         <AuthBoundary username={username}>
           <Suspense fallback={<div className="blog-loading">{t('blog.loading')}</div>}>
-            <Component key={`${username}:${path}`} {...props} />
+            <Component
+              key={`${username}:${path}`}
+              {...props}
+              title={meta.title}
+              description={meta.description ?? undefined}
+            />
           </Suspense>
         </AuthBoundary>
       </main>

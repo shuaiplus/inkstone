@@ -22,8 +22,10 @@ function pageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   return out
 }
 
-export default function FeedPage({ username }: {
+export default function FeedPage({ username, title, description }: {
   username: string
+  title?: string
+  description?: string
 }) {
   const [page, setPage] = useState(1)
   const { status, data } = useBlogQuery<BlogPostsResponse>(
@@ -43,16 +45,28 @@ export default function FeedPage({ username }: {
     )
 
   const totalPages = Math.max(1, data.totalPages)
+  const initial = (username || '?').charAt(0).toUpperCase()
 
   return (
     <div>
+      {(title || description) && (
+        <section className="blog-intro">
+          <span className="blog-intro-avatar">{initial}</span>
+          <div className="blog-intro-body">
+            {title && <h2 className="blog-intro-name">{title}</h2>}
+            {description && <p className="blog-intro-text">{description}</p>}
+          </div>
+        </section>
+      )}
       <h1 className="blog-section-title">{t('blog.articles')}</h1>
       {data.posts.length === 0 ? (
         <p className="blog-empty">{t('blog.no_articles')}</p>
       ) : (
-        data.posts.map((post) => (
-          <FeedCard key={post.id} post={post} username={username} />
-        ))
+        <div className="blog-feed-list">
+          {data.posts.map((post) => (
+            <FeedCard key={post.id} post={post} username={username} />
+          ))}
+        </div>
       )}
       {totalPages > 1 && (
         <nav className="blog-pagination" aria-label={t('blog.pagination')}>
@@ -71,7 +85,7 @@ export default function FeedPage({ username }: {
               <button
                 key={item}
                 type="button"
-                className={`blog-page-btn${item === page ? ' blog-page-btn-active' : ''}`}
+                className={`blog-page-btn${item === page ? ' blog-page-btn--active' : ''}`}
                 aria-current={item === page ? 'page' : undefined}
                 onClick={() => setPage(item)}
               >

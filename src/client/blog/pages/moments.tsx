@@ -44,7 +44,6 @@ export default function MomentsPage({ username }: {
     )
 
   const loadingMore = status === 'loading' && page > 1
-  const initial = (username || '?').charAt(0).toUpperCase()
 
   return (
     <div>
@@ -55,13 +54,16 @@ export default function MomentsPage({ username }: {
         <div className="blog-moments-feed">
           {moments.map((moment) => (
             <article key={moment.id} className="blog-moment">
-              <div className="blog-moment-head">
-                <span className="blog-avatar" aria-hidden>{initial}</span>
-                <div className="blog-moment-head-info">
-                  <span className="blog-moment-author">{username}</span>
-                  <time className="blog-moment-time" dateTime={new Date(moment.created_at).toISOString()}>{formatDate(moment.created_at)}</time>
-                </div>
+              <div className="blog-moment-time">
+                {formatDate(moment.created_at)}
               </div>
+              {moment.tags.length > 0 && (
+                <div className="blog-moment-tags">
+                  {moment.tags.map((tag) => (
+                    <span key={tag} className="blog-chip blog-chip--sm blog-chip--static">{tag}</span>
+                  ))}
+                </div>
+              )}
               <div className="blog-moment-body">
                 <BlogMarkdown content={moment.content} slug={moment.slug} />
               </div>
