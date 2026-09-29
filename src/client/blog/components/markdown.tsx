@@ -3,6 +3,7 @@ import { renderMarkdown } from '../../lib/markdown/renderer'
 import { enhancePreview, renderPendingMermaid } from '../../lib/markdown/enhance'
 import { t } from '../../lib/i18n'
 import { isBlogDark, onBlogThemeChange } from '../theme'
+import { BlogLightbox } from './lightbox'
 
 function addShareAccess(html: string, slug: string): string {
   const template = document.createElement('template')
@@ -49,6 +50,7 @@ export function BlogMarkdown({ content, slug }: {
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [dark, setDark] = useState(() => isBlogDark())
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
 
   useEffect(() => {
     return onBlogThemeChange(() => setDark(isBlogDark()))
@@ -65,6 +67,7 @@ export function BlogMarkdown({ content, slug }: {
       return
     let cancelled = false
     const isCurrent = () => !cancelled && hostRef.current === host
+
     void (async () => {
       await enhancePreview(host, { math: true, mermaid: true, dark })
       if (!isCurrent())
@@ -76,7 +79,29 @@ export function BlogMarkdown({ content, slug }: {
     }
   }, [html, dark])
 
+  const onHostClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    const img = target.closest<HTMLImageElement>('img')
+    if (img?.src) {
+      e.preventDefault()
+      setLightbox({ src: img.src, alt: img.alt })
+    }
+  }
+
   return (
-    <div className="blog-prose" dangerouslySetInnerHTML={{ __html: html }} ref={hostRef} />
+    <>
+      <div
+        className="blog-prose"
+        dangerouslySetInnerHTML={{ __html: html }}
+        ref={hostRef}
+        onClick={onHostClick}
+      />
+      {lightbox && (
+        <BlogLightbox
+          image={lightbox}
+          onClose={() => setLightbox(null)}
+        />
+      )}
+    </>
   )
 }

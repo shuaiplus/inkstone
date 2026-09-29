@@ -952,6 +952,148 @@ a.blog-chip:hover {
   margin: 1.2em 0;
 }
 
+.blog-prose img {
+  cursor: zoom-in;
+  border-radius: var(--blog-radius-sm);
+  margin-bottom: 0.5em;
+}
+
+.blog-prose img + img {
+  margin-top: 0.5em;
+}
+
+/* Lightbox — fullscreen image viewer (self-contained, no notebook deps) */
+
+.blog-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.8);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: blog-lightbox-fade 0.2s ease;
+  outline: none;
+}
+
+@keyframes blog-lightbox-fade {
+  from { opacity: 0; }
+}
+
+.blog-lightbox-img {
+  max-width: 92vw;
+  max-height: 86vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 8px 40px rgb(0 0 0 / 0.5);
+  transition: transform 200ms ease;
+}
+
+.blog-lightbox-failed {
+  max-width: 80vw;
+  padding: 24px;
+  border-radius: var(--blog-radius);
+  background: rgb(255 255 255 / 0.1);
+  color: rgb(255 255 255 / 0.75);
+  font-size: 14px;
+  text-align: center;
+}
+
+.blog-lightbox-close {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.15);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.2s;
+}
+
+.blog-lightbox-close:hover {
+  background: rgb(255 255 255 / 0.3);
+}
+
+.blog-lightbox-controls {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 60px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.blog-lightbox-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.15);
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.blog-lightbox-btn:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.3);
+}
+
+.blog-lightbox-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.blog-lightbox-zoom {
+  min-width: 40px;
+  text-align: center;
+  font-size: 11.5px;
+  color: rgb(255 255 255 / 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.blog-lightbox-alt {
+  position: absolute;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 82vw;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.5);
+  color: rgb(255 255 255 / 0.8);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 768px) {
+  .blog-lightbox-controls {
+    right: 64px;
+    gap: 6px;
+  }
+
+  .blog-lightbox-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .blog-lightbox-alt {
+    bottom: 24px;
+    max-width: 70vw;
+  }
+}
+
 /* 14. TOC ------------------------------------------------------------------ */
 
 .blog-toc-aside {
