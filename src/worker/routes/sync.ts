@@ -137,7 +137,7 @@ syncRoutes.get('/', requireAuth, async (c) => {
           .all<FolderRow>(),
       )
 
-  const allTags = facetsFull
+  const tags = facetsFull
     ? (
         await c.env.DB.prepare(
           `SELECT ${TAG_SELECT} FROM tags t
@@ -154,16 +154,13 @@ syncRoutes.get('/', requireAuth, async (c) => {
           .bind(userId, ...ids)
           .all<TagRow>(),
       )
-  const tags = allTags
 
   const gotNotes = new Set(notes.map((n) => n.id))
   for (const id of noteIds) if (!gotNotes.has(id)) deletions.push({ entity: 'note', id })
   const gotFolders = new Set(folders.map((f) => f.id))
   for (const id of folderIds) if (!gotFolders.has(id)) deletions.push({ entity: 'folder', id })
   const gotTags = new Set(tags.map((t) => t.id))
-  for (const id of tagIds) {
-    if (!gotTags.has(id)) deletions.push({ entity: 'tag', id })
-  }
+  for (const id of tagIds) if (!gotTags.has(id)) deletions.push({ entity: 'tag', id })
 
   const body: SyncResponse = {
     cursor,

@@ -522,20 +522,6 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       `CREATE INDEX IF NOT EXISTS idx_versions_user ON note_versions(user_id)`,
     ],
   },
-  {
-    version: 13,
-    skipIfColumnExists: { table: 'shares', column: 'blog_published' },
-    statements: [
-      `ALTER TABLE shares ADD COLUMN blog_published INTEGER NOT NULL DEFAULT 0`,
-    ],
-  },
-  {
-    version: 14,
-    statements: [
-      `DROP INDEX IF EXISTS idx_shares_blog`,
-      `ALTER TABLE shares DROP COLUMN blog_published`,
-    ],
-  },
 ]
 
 const FTS_STATEMENT = `CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(

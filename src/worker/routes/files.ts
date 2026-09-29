@@ -234,16 +234,16 @@ filesRoutes.get('/:id', async (c) => {
     const share = await c.env.DB.prepare(
       `SELECT s.slug, s.password_hash,
               (EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
-                        WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name = '${BLOG_PRIVATE_TAG}')
+                        WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name = ?4)
                 OR EXISTS (SELECT 1 FROM folders f WHERE f.id = n.folder_id
-                            AND f.name = '${MOMENTS_FOLDER_NAME}' AND f.parent_id IS NULL AND f.deleted_at IS NULL)) AS blog_private,
+                            AND f.name = ?5 AND f.parent_id IS NULL AND f.deleted_at IS NULL)) AS blog_private,
               s.user_id, n.content
          FROM shares s
-         JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
-        WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
-          AND (s.expires_at IS NULL OR s.expires_at > ?3)`,
+          JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
+         WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
+           AND (s.expires_at IS NULL OR s.expires_at > ?3)`,
     )
-      .bind(shareSlug, row.user_id, Date.now())
+      .bind(shareSlug, row.user_id, Date.now(), BLOG_PRIVATE_TAG, MOMENTS_FOLDER_NAME)
       .first<{
         slug: string
         password_hash: string | null
