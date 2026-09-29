@@ -1,11 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-interface BlogLightboxState {
-  src: string
-  alt: string
-}
-
 function useEscape(active: boolean, onEscape: () => void) {
   const ref = useRef(onEscape)
   ref.current = onEscape
@@ -34,10 +29,13 @@ function useLockScroll(active: boolean) {
   }, [active])
 }
 
-export function BlogLightbox({ image, onClose }: {
-  image: BlogLightboxState
+export function BlogLightbox({ images, index, onClose, onNavigate }: {
+  images: string[]
+  index: number
   onClose: () => void
+  onNavigate: (index: number) => void
 }) {
+  const src = images[index] ?? ''
   const [scale, setScale] = useState(1)
   const [failed, setFailed] = useState(false)
 
@@ -47,7 +45,7 @@ export function BlogLightbox({ image, onClose }: {
   useLayoutEffect(() => {
     setScale(1)
     setFailed(false)
-  }, [image.src])
+  }, [src])
 
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
@@ -59,6 +57,23 @@ export function BlogLightbox({ image, onClose }: {
     return () => window.removeEventListener('wheel', onWheel)
   }, [])
 
+  const hasPrev = index > 0
+  const hasNext = index < images.length - 1
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft' && hasPrev) {
+        e.preventDefault()
+        onNavigate(index - 1)
+      } else if (e.key === 'ArrowRight' && hasNext) {
+        e.preventDefault()
+        onNavigate(index + 1)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [hasPrev, hasNext, index, onNavigate])
+
   return createPortal(
     <div
       role="dialog"
@@ -69,12 +84,12 @@ export function BlogLightbox({ image, onClose }: {
     >
       {failed ? (
         <div className="blog-lightbox-failed">
-          {image.alt && <p>{image.alt}</p>}
+          <p>Image failed to load</p>
         </div>
       ) : (
         <img
-          src={image.src}
-          alt={image.alt}
+          src={src}
+          alt=""
           onError={() => setFailed(true)}
           onClick={(e) => e.stopPropagation()}
           onDoubleClick={() => setScale((s) => (s === 1 ? 2 : 1))}
@@ -92,6 +107,29 @@ export function BlogLightbox({ image, onClose }: {
           <path d="M6 6l12 12M6 18L18 6" />
         </svg>
       </button>
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            className="blog-lightbox-arrow blog-lightbox-arrow--prev"
+            disabled={!hasPrev}
+            onClick={(e) => { e.stopPropagation(); if (hasPrev) onNavigate(index - 1) }}
+            aria-label="Previous"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+          </button>
+          <button
+            type="button"
+            className="blog-lightbox-arrow blog-lightbox-arrow--next"
+            disabled={!hasNext}
+            onClick={(e) => { e.stopPropagation(); if (hasNext) onNavigate(index + 1) }}
+            aria-label="Next"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+          </button>
+          <div className="blog-lightbox-counter">{index + 1} / {images.length}</div>
+        </>
+      )}
       <div className="blog-lightbox-controls" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
@@ -113,7 +151,7 @@ export function BlogLightbox({ image, onClose }: {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M11 8v6M8 11h6M20 20l-3.5-3.5" /></svg>
         </button>
         <a
-          href={image.src}
+          href={src}
           download
           target="_blank"
           rel="noreferrer"
@@ -123,9 +161,6 @@ export function BlogLightbox({ image, onClose }: {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
         </a>
       </div>
-      {image.alt && (
-        <div className="blog-lightbox-alt">{image.alt}</div>
-      )}
     </div>,
     document.body,
   )

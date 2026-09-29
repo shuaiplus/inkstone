@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractAttachmentIds, extractTags, firstImageSrc } from './markdown-utils'
+import { extractAttachmentIds, extractTags, firstImageSrc, extractImageSrcs } from './markdown-utils'
 
 describe('extractTags', () => {
   it('handles an unterminated inline-code marker with a mismatched trailing marker', () => {
@@ -85,5 +85,40 @@ Intro text.
 
   it('resolves remote images as-is', () => {
     expect(firstImageSrc('![a](https://example.com/a.png)')).toBe('https://example.com/a.png')
+  })
+})
+
+describe('extractImageSrcs', () => {
+  it('returns empty array for empty or imageless markdown', () => {
+    expect(extractImageSrcs('')).toEqual([])
+    expect(extractImageSrcs('just text')).toEqual([])
+  })
+
+  it('collects all inline images in order, ignoring front matter', () => {
+    const content = `---
+title: Hello
+---
+![a](/api/files/abc)
+
+![b](/api/files/def)`
+    expect(extractImageSrcs(content)).toEqual(['/api/files/abc', '/api/files/def'])
+  })
+
+  it('de-duplicates by URL', () => {
+    expect(extractImageSrcs('![a](/api/files/abc)\n![a2](/api/files/abc)')).toEqual(['/api/files/abc'])
+  })
+
+  it('ignores images inside code blocks', () => {
+    expect(extractImageSrcs('```\n![nope](/api/files/xyz)\n```\n![yes](/api/files/ok)')).toEqual(['/api/files/ok'])
+  })
+
+  it('resolves reference-style images', () => {
+    const content = '![alt][ref]\n\n[ref]: /api/files/refd "Ref Title"'
+    expect(extractImageSrcs(content)).toEqual(['/api/files/refd'])
+  })
+
+  it('handles a mix of inline and reference-style images', () => {
+    const content = '![a](/api/files/abc)\n![b][ref]\n\n[ref]: /api/files/def'
+    expect(extractImageSrcs(content)).toEqual(['/api/files/abc', '/api/files/def'])
   })
 })

@@ -457,13 +457,30 @@ const REF_IMAGE_USE_RE = /!\[[^\]]*\]\[([^\]]+)\]/g
  * defined elsewhere in the document. Returns null when there is no image.
  */
 export function firstImageSrc(content: string): string | null {
+  const urls = extractImageSrcs(content)
+  return urls.length > 0 ? urls[0]! : null
+}
+
+/**
+ * Returns all image URLs found in the markdown body, ignoring front matter
+ * and code blocks. Handles inline images (with optional `<...>` URL brackets
+ * and an optional title), plus reference-style images defined elsewhere in
+ * the document. De-duplicates by URL, preserving first-seen order.
+ */
+export function extractImageSrcs(content: string): string[] {
   const body = splitFrontMatter(content).body
   const stripped = stripCodeRegions(body)
+  const urls: string[] = []
+  const seen = new Set<string>()
   for (const match of stripped.matchAll(INLINE_IMAGE_RE)) {
     const url = match[1]!.trim()
     if (!url)
       continue
-    return url.startsWith('<') && url.endsWith('>') ? url.slice(1, -1) : url
+    const resolved = url.startsWith('<') && url.endsWith('>') ? url.slice(1, -1) : url
+    if (!seen.has(resolved)) {
+      seen.add(resolved)
+      urls.push(resolved)
+    }
   }
   const definitions = new Map<string, string>()
   for (const match of stripped.matchAll(REF_IMAGE_DEF_RE)) {
@@ -471,10 +488,12 @@ export function firstImageSrc(content: string): string | null {
   }
   for (const match of stripped.matchAll(REF_IMAGE_USE_RE)) {
     const url = definitions.get(match[1]!.trim().toLowerCase())
-    if (url)
-      return url
+    if (url && !seen.has(url)) {
+      seen.add(url)
+      urls.push(url)
+    }
   }
-  return null
+  return urls
 }
 
 

@@ -50,7 +50,7 @@ export function BlogMarkdown({ content, slug }: {
 }) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [dark, setDark] = useState(() => isBlogDark())
-  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
+  const [lightbox, setLightbox] = useState<{ src: string; images: string[]; index: number } | null>(null)
 
   useEffect(() => {
     return onBlogThemeChange(() => setDark(isBlogDark()))
@@ -84,7 +84,7 @@ export function BlogMarkdown({ content, slug }: {
     const img = target.closest<HTMLImageElement>('img')
     if (img?.src) {
       e.preventDefault()
-      setLightbox({ src: img.src, alt: img.alt })
+      setLightbox({ src: img.src, images: [img.src], index: 0 })
     }
   }
 
@@ -98,8 +98,10 @@ export function BlogMarkdown({ content, slug }: {
       />
       {lightbox && (
         <BlogLightbox
-          image={lightbox}
+          images={lightbox.images}
+          index={lightbox.index}
           onClose={() => setLightbox(null)}
+          onNavigate={(i) => setLightbox({ src: lightbox.images[i]!, images: lightbox.images, index: i })}
         />
       )}
     </>

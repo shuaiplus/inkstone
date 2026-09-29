@@ -1095,6 +1095,64 @@ a.blog-chip:hover {
   }
 }
 
+.blog-lightbox-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.15);
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.2s;
+}
+
+.blog-lightbox-arrow:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.3);
+}
+
+.blog-lightbox-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.blog-lightbox-arrow--prev {
+  left: 12px;
+}
+
+.blog-lightbox-arrow--next {
+  right: 12px;
+}
+
+.blog-lightbox-counter {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgb(255 255 255 / 0.8);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 768px) {
+  .blog-lightbox-arrow {
+    width: 48px;
+    height: 48px;
+  }
+
+  .blog-lightbox-arrow--prev {
+    left: 24px;
+  }
+
+  .blog-lightbox-arrow--next {
+    right: 24px;
+  }
+}
+
 /* 14. TOC ------------------------------------------------------------------ */
 
 .blog-toc-aside {
@@ -1247,6 +1305,70 @@ a.blog-chip:hover {
 .blog-moment-body .blog-prose {
   font-size: 15px;
   line-height: 1.7;
+}
+
+/* When images are shown as a grid, hide the inline prose images */
+
+.blog-moment-body--has-images .blog-prose img {
+  display: none;
+}
+
+/* Moment image grid — WeChat Moments style:
+   1 image = single large image
+   2-3 images = two columns
+   4+ images = three columns, square thumbnails */
+
+.blog-moment-images {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.blog-moment-images--1 {
+  grid-template-columns: 1fr;
+  max-width: 320px;
+}
+
+.blog-moment-images--1 .blog-moment-image {
+  aspect-ratio: auto;
+}
+
+.blog-moment-images--1 .blog-moment-image img {
+  object-fit: contain;
+}
+
+.blog-moment-images--2,
+.blog-moment-images--3 {
+  grid-template-columns: repeat(2, 1fr);
+  max-width: 320px;
+}
+
+.blog-moment-images--4,
+.blog-moment-images--5,
+.blog-moment-images--6,
+.blog-moment-images--7,
+.blog-moment-images--8,
+.blog-moment-images--9 {
+  grid-template-columns: repeat(3, 1fr);
+  max-width: 320px;
+}
+
+.blog-moment-image {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: zoom-in;
+  overflow: hidden;
+  border-radius: var(--blog-radius-sm);
+  aspect-ratio: 1 / 1;
+  background: var(--blog-border);
+}
+
+.blog-moment-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .blog-moments-gate {

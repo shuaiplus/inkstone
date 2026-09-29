@@ -2,8 +2,10 @@
 import { blogApi } from '../api'
 import type { BlogMomentsResponse, MomentItem } from '@shared/blog/types'
 import { BlogMarkdown } from '../components/markdown'
+import { BlogLightbox } from '../components/lightbox'
 import { useBlogQuery } from './use-blog-query'
 import { visibleTags } from '../filter-tags'
+import { extractImageSrcs } from '@shared/markdown-utils'
 import { t } from '../../lib/i18n'
 
 function formatDate(ts: number): string {
@@ -14,6 +16,20 @@ function formatDate(ts: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
+function appendShare(src: string, slug: string): string {
+  try {
+    const url = new URL(src, window.location.origin)
+    if (url.origin !== window.location.origin ||
+        !/^\/api\/files\/[0-9a-hjkmnp-tv-z]{26}$/i.test(url.pathname)) {
+      return src
+    }
+    url.searchParams.set('share', slug)
+    return `${url.pathname}${url.search}`
+  } catch {
+    return src
+  }
+}
+
 export default function MomentsPage({ username, hiddenTags }: {
   username: string
   hiddenTags?: string[]
@@ -21,6 +37,7 @@ export default function MomentsPage({ username, hiddenTags }: {
   const [page, setPage] = useState(1)
   const [moments, setMoments] = useState<MomentItem[]>([])
   const [hasMore, setHasMore] = useState(false)
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const { status, data } = useBlogQuery<BlogMomentsResponse>(
     () => blogApi.moments(username, page),
     [username, page],
@@ -55,6 +72,7 @@ export default function MomentsPage({ username, hiddenTags }: {
         <div className="blog-moments-feed">
           {moments.map((moment) => {
             const tags = visibleTags(moment.tags, hiddenTags)
+            const images = extractImageSrcs(moment.content).map((src) => appendShare(src, moment.slug))
             return (
               <article key={moment.id} className="blog-moment">
                 <div className="blog-moment-time">
@@ -67,9 +85,25 @@ export default function MomentsPage({ username, hiddenTags }: {
                     ))}
                   </div>
                 )}
-                <div className="blog-moment-body">
+                <div className={`blog-moment-body${images.length > 0 ? ' blog-moment-body--has-images' : ''}`}>
                   <BlogMarkdown content={moment.content} slug={moment.slug} />
                 </div>
+                {images.length > 0 && (
+                  <div
+                    className={`blog-moment-images blog-moment-images--${Math.min(images.length, 9)}`}
+                  >
+                    {images.slice(0, 9).map((src, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="blog-moment-image"
+                        onClick={() => setLightbox({ images, index: i })}
+                      >
+                        <img src={src} alt="" loading="lazy" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </article>
             )
           })}
@@ -81,6 +115,14 @@ export default function MomentsPage({ username, hiddenTags }: {
             {loadingMore ? t('blog.loading') : t('blog.load_more')}
           </button>
         </div>
+      )}
+      {lightbox && (
+        <BlogLightbox
+          images={lightbox.images}
+          index={lightbox.index}
+          onClose={() => setLightbox(null)}
+          onNavigate={(i) => setLightbox({ images: lightbox.images, index: i })}
+        />
       )}
     </div>
   )
