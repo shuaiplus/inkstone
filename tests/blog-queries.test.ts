@@ -30,6 +30,32 @@ interface MockDb {
 
 type Handler = (args: unknown[]) => Promise<{ all?: MockRow[]; first?: MockRow | null }>
 
+/**
+ * Counts SQL placeholders the same way D1 expects binds:
+ * - strips string literals and line comments so a '?' inside text is not counted
+ * - numbered placeholders (?n) require binds up to the highest index
+ * - anonymous '?' each require one bind
+ */
+function countPlaceholders(sql: string): number {
+  const stripped = sql
+    .replace(/--[^\n]*/g, '')
+    .replace(/'(?:[^']|'')*'|"(?:[^"]|"")*"|`(?:[^`]|``)*`/g, '""')
+  let max = 0
+  let anonymous = 0
+  let hasNumbered = false
+  const re = /\?(\d*)/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped))) {
+    if (m[1]) {
+      hasNumbered = true
+      max = Math.max(max, Number(m[1]))
+    } else {
+      anonymous++
+    }
+  }
+  return hasNumbered ? max : anonymous
+}
+
 function makeDb(handlers: Array<[key: string, handler: Handler]>): MockDb {
   const resolve = (sql: string): Handler =>
     handlers.find(([key]) => sql.includes(key))?.[1] ?? (async () => ({ all: [], first: null }))
@@ -40,6 +66,12 @@ function makeDb(handlers: Array<[key: string, handler: Handler]>): MockDb {
       const handler = resolve(sql)
       return {
         bind(...args: unknown[]) {
+          const expected = countPlaceholders(sql)
+          if (expected > 0 && args.length !== expected) {
+            throw new Error(
+              `[mockDb] bind expects ${expected} value(s) but got ${args.length}: ${sql.replace(/\s+/g, ' ').slice(0, 140)}...`,
+            )
+          }
           return {
             async all<T = MockRow>() {
               const out = await handler(args)
