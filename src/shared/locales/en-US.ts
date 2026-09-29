@@ -589,7 +589,7 @@ export const EN_US_MESSAGES = {
     "settings.blog_clear_password": "Clear password",
     "settings.blog_intro": "Publish notes as a public blog. Set a title and protect it with a password.",
     "settings.blog_loading": "Loading blog settings…",
-    "settings.blog_password": "Blog password",
+    "settings.blog_password": "Blog password (default: your account password)",
     "settings.blog_password_account_hint": "Uses your account password",
     "settings.blog_password_clear_desc": "Readers will use your account password to view your blog.",
     "settings.blog_password_clear_title": "Clear the blog password?",
