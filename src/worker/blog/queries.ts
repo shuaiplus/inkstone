@@ -5,6 +5,7 @@ import type {
   BlogPostSummary,
   BlogPostsResponse,
   BlogTag,
+  BlogTagPost,
   BlogTimelineResponse,
 } from '@shared/blog/types'
 import type { BlogTagConfig } from '@shared/blog/tags'
@@ -52,6 +53,27 @@ function tierBinds(tier: 'public' | 'all', config: BlogTagConfig): string[] {
 }
 
 const excludeMomentsClause = `AND NOT EXISTS (SELECT 1 FROM folders f2 WHERE f2.id = n.folder_id AND f2.name = '${MOMENTS_FOLDER_NAME}' AND f2.parent_id IS NULL AND f2.deleted_at IS NULL)`
+
+const momentClause = `EXISTS (SELECT 1 FROM folders f2 WHERE f2.id = n.folder_id AND f2.name = '${MOMENTS_FOLDER_NAME}' AND f2.parent_id IS NULL AND f2.deleted_at IS NULL)`
+
+/**
+ * SQL + ordered binds that scope blog content to notes the visitor may see:
+ * - articles: notes carrying the blog-public/blog-private tag (excluding the Moments folder)
+ * - moments: notes in the root Moments folder (public tier also excludes blog-private moments)
+ */
+function blogScopeSql(tier: 'public' | 'all', config: BlogTagConfig): { sql: string; binds: string[] } {
+  const articleBinds = tier === 'public' ? [config.publicTag] : [config.publicTag, config.privateTag]
+  const article = `(${tierFilter(tier).replace(/^AND /, '')} AND NOT ${momentClause})`
+  if (tier === 'all') {
+    return { sql: `(${article} OR ${momentClause})`, binds: articleBinds }
+  }
+  const privateExclude = `AND NOT EXISTS (SELECT 1 FROM note_tags nt3 JOIN tags t3 ON t3.id = nt3.tag_id
+                    WHERE nt3.note_id = n.id AND t3.user_id = n.user_id AND t3.name = ?)`
+  return {
+    sql: `(${article} OR (${momentClause} ${privateExclude}))`,
+    binds: [...articleBinds, config.privateTag],
+  }
+}
 
 interface BlogPostRow {
   id: string
@@ -269,7 +291,8 @@ export async function listBlogTags(
   config: BlogTagConfig,
 ): Promise<BlogTag[]> {
   const now = Date.now()
-  const where = `s.user_id = ? ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?)`
+  const scope = blogScopeSql(tier, config)
+  const where = `s.user_id = ? AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) AND ${scope.sql}`
   const { results } = await db
     .prepare(
       `SELECT t.name, COUNT(*) AS count
@@ -282,9 +305,13 @@ export async function listBlogTags(
        HAVING count > 0
         ORDER BY count DESC, t.name ASC`,
     )
-    .bind(userId, ...tierBinds(tier, config), now)
+    .bind(userId, now, ...scope.binds)
     .all<{ name: string; count: number }>()
   return results
+}
+
+interface BlogTagRow extends BlogPostRow {
+  is_moment: number
 }
 
 export async function listPostsByTag(
@@ -293,19 +320,40 @@ export async function listPostsByTag(
   tagName: string,
   tier: 'public' | 'all',
   config: BlogTagConfig,
-): Promise<BlogPostSummary[]> {
+): Promise<BlogTagPost[]> {
   const now = Date.now()
+  const scope = blogScopeSql(tier, config)
+  const where = `s.user_id = ? AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) AND ${scope.sql}`
   const { results } = await db
     .prepare(
-      `SELECT ${SHARE_POST_COLUMNS}
+      `SELECT ${SHARE_POST_COLUMNS},
+              CASE WHEN ${momentClause} THEN 1 ELSE 0 END AS is_moment
          FROM shares s
          JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
          JOIN note_tags nt ON nt.note_id = n.id
          JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
-        WHERE s.user_id = ? ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) AND t.name = ? COLLATE NOCASE
+        WHERE ${where} AND t.name = ? COLLATE NOCASE
         ORDER BY s.created_at DESC`,
     )
-    .bind(userId, ...tierBinds(tier, config), now, tagName)
-    .all<BlogPostRow>()
-  return results.map(toBlogPostSummary)
+    .bind(userId, now, ...scope.binds, tagName)
+    .all<BlogTagRow>()
+  return results.map((row) => {
+    const base = {
+      id: row.id,
+      created_at: frontMatterCreated(row.content) ?? row.created_at,
+      slug: row.slug,
+      tags: splitTags(row.tag_names),
+    }
+    if (row.is_moment === 1) {
+      return { kind: 'moment', content: row.content, ...base }
+    }
+    return {
+      kind: 'article',
+      title: row.title,
+      excerpt: row.excerpt,
+      updated_at: row.updated_at,
+      cover: firstImageSrc(row.content),
+      ...base,
+    }
+  })
 }

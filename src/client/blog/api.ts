@@ -1,6 +1,6 @@
 import type {
   BlogPostsResponse, BlogPostDetail, BlogMomentsResponse, BlogTag,
-  BlogPostSummary, BlogTimelineResponse,
+  BlogTimelineResponse, BlogTagPost,
 } from '@shared/blog/types'
 import { CLIENT_HEADER } from '@shared/constants'
 
@@ -64,7 +64,7 @@ export const blogApi = {
   tags: (username: string) =>
     blogFetch<{ tags: BlogTag[] }>(`/${encodeURIComponent(username)}/tags`),
   tag: (username: string, name: string) =>
-    blogFetch<{ name: string; posts: BlogPostSummary[] }>(`/${encodeURIComponent(username)}/tags/${encodeURIComponent(name)}`),
+    blogFetch<{ name: string; posts: BlogTagPost[] }>(`/${encodeURIComponent(username)}/tags/${encodeURIComponent(name)}`),
   settings: () =>
     blogFetch<BlogSettings>('/settings'),
   updateSettings: (body: { password?: string | null; title?: string; description?: string | null; publicTag?: string; privateTag?: string }) =>

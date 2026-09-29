@@ -33,6 +33,10 @@ export interface BlogTag {
   count: number
 }
 
+export type BlogTagPost =
+  | ({ kind: 'article' } & BlogPostSummary)
+  | ({ kind: 'moment' } & MomentItem)
+
 export interface MomentItem {
   id: string
   content: string

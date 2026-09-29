@@ -183,6 +183,22 @@ function mockDbWithPostsByTag(): MockDb {
   ])
 }
 
+function mockDbWithTaggedMoments(): MockDb {
+  return makeDb([
+    ['GROUP BY t.name', async () => ({
+      all: [
+        { name: 'plant', count: 1 },
+        { name: 'a', count: 2 },
+      ],
+    })],
+    ['COLLATE NOCASE', async () => ({
+      all: [
+        { id: 'moment-1', content: 'a plant note', created_at: 1_700_000_000_000, slug: 'moment-1-slug', tag_names: 'plant', is_moment: 1 },
+      ],
+    })],
+  ])
+}
+
 function mockDbWithAdjacent(): MockDb {
   return makeDb([
     ['s.note_id < ?', async () => ({ first: { title: 'Older post', slug: 'older' } })],
@@ -296,10 +312,33 @@ describe('blog queries', () => {
     ])
   })
 
+  it('listBlogTags includes tags from Moments-folder notes', async () => {
+    const db = mockDbWithTaggedMoments()
+    const tags = await listBlogTags(db, 'u1', 'all', config)
+    expect(tags.map((tag) => tag.name)).toContain('plant')
+    expect(hasSql(db, "f2.name = 'Moments'")).toBe(true)
+  })
+
   it('listPostsByTag returns posts filtered by tag name', async () => {
     const db = mockDbWithPostsByTag()
     const posts = await listPostsByTag(db, 'u1', 'tag', 'all', config)
     expect(posts.map((p) => p.id)).toEqual(['tagged-note'])
     expect(hasSql(db, 'COLLATE NOCASE')).toBe(true)
+  })
+
+  it('listPostsByTag returns moments with kind "moment"', async () => {
+    const db = mockDbWithTaggedMoments()
+    const posts = await listPostsByTag(db, 'u1', 'plant', 'all', config)
+    expect(posts).toEqual([
+      {
+        kind: 'moment',
+        id: 'moment-1',
+        content: 'a plant note',
+        created_at: 1_700_000_000_000,
+        slug: 'moment-1-slug',
+        tags: ['plant'],
+      },
+    ])
+    expect(hasSql(db, 'is_moment')).toBe(true)
   })
 })

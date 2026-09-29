@@ -1,6 +1,7 @@
 ﻿import { blogApi } from '../api'
-import type { BlogPostSummary } from '@shared/blog/types'
+import type { BlogTagPost } from '@shared/blog/types'
 import { FeedCard } from '../components/feed-card'
+import { MomentCard } from '../components/moment-card'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
 import { t } from '../../lib/i18n'
@@ -13,12 +14,13 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-export default function TagPage({ username, name }: {
+export default function TagPage({ username, name, hiddenTags }: {
   username: string
   name: string
+  hiddenTags?: string[]
 }) {
   const decodedName = safeDecodeURIComponent(name)
-  const { status, data } = useBlogQuery<{ name: string; posts: BlogPostSummary[] }>(
+  const { status, data } = useBlogQuery<{ name: string; posts: BlogTagPost[] }>(
     () => blogApi.tag(username, decodedName),
     [username, decodedName],
   )
@@ -40,9 +42,11 @@ export default function TagPage({ username, name }: {
       {data.posts.length === 0 ? (
         <p className="blog-empty">{t('blog.no_posts_for_tag')}</p>
       ) : (
-        data.posts.map((post) => (
-          <FeedCard key={post.id} post={post} username={username} />
-        ))
+        data.posts.map((post) =>
+          post.kind === 'moment'
+            ? <MomentCard key={post.id} moment={post} hiddenTags={hiddenTags} />
+            : <FeedCard key={post.id} post={post} username={username} />,
+        )
       )}
     </div>
   )
