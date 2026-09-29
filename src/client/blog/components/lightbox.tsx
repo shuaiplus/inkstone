@@ -38,6 +38,11 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
   const src = images[index] ?? ''
   const [scale, setScale] = useState(1)
   const [failed, setFailed] = useState(false)
+  const [dragX, setDragX] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const swipeRef = useRef<{ id: number; x0: number; y0: number; locked: 'h' | 'v' | null } | null>(null)
+  const swipedRef = useRef(false)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   useEscape(true, onClose)
   useLockScroll(true)
@@ -45,7 +50,82 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
   useLayoutEffect(() => {
     setScale(1)
     setFailed(false)
+    setDragX(0)
+    swipedRef.current = false
   }, [src])
+
+  // Left/right touch swipe to switch images (only when not zoomed in)
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el)
+      return
+    const SWIPE_THRESHOLD = 60
+    const onDown = (e: TouchEvent) => {
+      if (scale !== 1 || images.length < 2)
+        return
+      const t = e.touches[0]
+      if (!t)
+        return
+      swipeRef.current = { id: t.identifier, x0: t.clientX, y0: t.clientY, locked: null }
+    }
+    const onMove = (e: TouchEvent) => {
+      const s = swipeRef.current
+      if (!s)
+        return
+      const t = e.changedTouches[0]
+      if (!t || t.identifier !== s.id)
+        return
+      const dx = t.clientX - s.x0
+      const dy = t.clientY - s.y0
+      if (s.locked === null) {
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10)
+          s.locked = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
+      }
+      if (s.locked !== 'h') {
+        setDragX(0)
+        setDragging(false)
+        return
+      }
+      e.preventDefault()
+      setDragging(true)
+      // Damp horizontal drag at the ends so it feels "resistant"
+      const damped = (index === 0 && dx > 0) || (index === images.length - 1 && dx < 0)
+        ? dx / 3
+        : dx
+      setDragX(damped)
+    }
+    const onUp = (e: TouchEvent) => {
+      const s = swipeRef.current
+      if (!s)
+        return
+      const t = e.changedTouches[0]
+      swipeRef.current = null
+      setDragging(false)
+      if (!t || t.identifier !== s.id || s.locked !== 'h') {
+        setDragX(0)
+        return
+      }
+      const dx = t.clientX - s.x0
+      if (dx < -SWIPE_THRESHOLD && index < images.length - 1) {
+        swipedRef.current = true
+        onNavigate(index + 1)
+      } else if (dx > SWIPE_THRESHOLD && index > 0) {
+        swipedRef.current = true
+        onNavigate(index - 1)
+      }
+      setDragX(0)
+    }
+    el.addEventListener('touchstart', onDown, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onUp)
+    el.addEventListener('touchcancel', onUp)
+    return () => {
+      el.removeEventListener('touchstart', onDown)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onUp)
+      el.removeEventListener('touchcancel', onUp)
+    }
+  }, [scale, images.length, index, onNavigate])
 
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
@@ -80,7 +160,14 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
       aria-modal="true"
       tabIndex={-1}
       className="blog-lightbox"
-      onClick={onClose}
+      ref={rootRef}
+      onClick={() => {
+        if (swipedRef.current) {
+          swipedRef.current = false
+          return
+        }
+        onClose()
+      }}
     >
       {failed ? (
         <div className="blog-lightbox-failed">
@@ -93,8 +180,9 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
           onError={() => setFailed(true)}
           onClick={(e) => e.stopPropagation()}
           onDoubleClick={() => setScale((s) => (s === 1 ? 2 : 1))}
-          style={{ transform: `scale(${scale})` }}
-          className="blog-lightbox-img"
+          draggable={false}
+          style={{ transform: `translateX(${dragX}px) scale(${scale})` }}
+          className={`blog-lightbox-img${dragging ? ' blog-lightbox-img--dragging' : ''}`}
         />
       )}
       <button

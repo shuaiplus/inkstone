@@ -989,7 +989,13 @@ a.blog-chip:hover {
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 8px 40px rgb(0 0 0 / 0.5);
-  transition: transform 200ms ease;
+  transition: transform 200ms ease, opacity 200ms ease;
+  touch-action: pan-y;
+}
+
+/* No transition while drag-following the finger, so the image tracks touch 1:1 */
+.blog-lightbox-img--dragging {
+  transition: none;
 }
 
 .blog-lightbox-failed {
