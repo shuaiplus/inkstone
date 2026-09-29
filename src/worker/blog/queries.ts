@@ -155,14 +155,14 @@ export async function getAdjacentPosts(
       `${base} AND (s.created_at < ? OR (s.created_at = ? AND s.note_id < ?))
         ORDER BY s.created_at DESC, s.note_id DESC LIMIT 1`,
     )
-    .bind(userId, ...tierBinds(tier, config), now, createdAt, noteId)
+    .bind(userId, ...tierBinds(tier, config), now, createdAt, createdAt, noteId)
     .first<{ title: string; slug: string }>()
   const next = await db
     .prepare(
       `${base} AND (s.created_at > ? OR (s.created_at = ? AND s.note_id > ?))
         ORDER BY s.created_at ASC, s.note_id ASC LIMIT 1`,
     )
-    .bind(userId, ...tierBinds(tier, config), now, createdAt, noteId)
+    .bind(userId, ...tierBinds(tier, config), now, createdAt, createdAt, noteId)
     .first<{ title: string; slug: string }>()
   return { previous: previous ?? null, next: next ?? null }
 }
@@ -188,8 +188,8 @@ export async function listBlogMoments(
      ${privateExclude}
     WHERE n.user_id = ? AND n.deleted_at IS NULL`
   const bindParams = tier === 'public'
-    ? [userId, now, config.privateTag, MOMENTS_FOLDER_NAME, limit, offset]
-    : [userId, now, MOMENTS_FOLDER_NAME, limit, offset]
+    ? [MOMENTS_FOLDER_NAME, now, config.privateTag, userId, limit, offset]
+    : [MOMENTS_FOLDER_NAME, now, userId, limit, offset]
   const { results } = await db
     .prepare(
       `SELECT n.id, n.content, n.created_at, s.slug AS slug, ${TAG_SUBQUERY}
@@ -200,8 +200,8 @@ export async function listBlogMoments(
     .bind(...bindParams)
     .all<{ id: string; content: string; created_at: number; slug: string; tag_names: string | null }>()
   const countBindParams = tier === 'public'
-    ? [userId, now, config.privateTag, MOMENTS_FOLDER_NAME]
-    : [userId, now, MOMENTS_FOLDER_NAME]
+    ? [MOMENTS_FOLDER_NAME, now, config.privateTag, userId]
+    : [MOMENTS_FOLDER_NAME, now, userId]
   const count = await db
     .prepare(`SELECT COUNT(*) AS count ${from}`)
     .bind(...countBindParams)
