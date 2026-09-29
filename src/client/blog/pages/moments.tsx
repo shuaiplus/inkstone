@@ -45,7 +45,7 @@ export default function MomentsPage({ username, hiddenTags }: {
       ) : (
         <div className="blog-moments-feed">
           {moments.map((moment) => (
-            <MomentCard key={moment.id} moment={moment} hiddenTags={hiddenTags} />
+            <MomentCard key={moment.id} moment={moment} username={username} hiddenTags={hiddenTags} />
           ))}
         </div>
       )}

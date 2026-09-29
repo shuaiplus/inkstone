@@ -27,11 +27,13 @@ function appendShare(src: string, slug: string): string {
   }
 }
 
-export function MomentCard({ moment, hiddenTags }: {
+export function MomentCard({ moment, username, hiddenTags }: {
   moment: MomentItem
+  username: string
   hiddenTags?: string[]
 }) {
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
+  const base = `/blog/${encodeURIComponent(username)}`
   const tags = visibleTags(moment.tags, hiddenTags)
   const images = extractImageSrcs(moment.content).map((src) => appendShare(src, moment.slug))
 
@@ -43,7 +45,7 @@ export function MomentCard({ moment, hiddenTags }: {
       {tags.length > 0 && (
         <div className="blog-moment-tags">
           {tags.map((tag) => (
-            <span key={tag} className="blog-chip blog-chip--sm blog-chip--static">{tag}</span>
+            <a key={tag} className="blog-chip blog-chip--sm" href={`${base}/tags/${encodeURIComponent(tag)}`}>{tag}</a>
           ))}
         </div>
       )}

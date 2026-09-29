@@ -44,7 +44,7 @@ export default function TagPage({ username, name, hiddenTags }: {
       ) : (
         data.posts.map((post) =>
           post.kind === 'moment'
-            ? <MomentCard key={post.id} moment={post} hiddenTags={hiddenTags} />
+            ? <MomentCard key={post.id} moment={post} username={username} hiddenTags={hiddenTags} />
             : <FeedCard key={post.id} post={post} username={username} />,
         )
       )}
