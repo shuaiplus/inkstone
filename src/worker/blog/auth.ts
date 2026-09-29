@@ -1,6 +1,7 @@
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import type { Context } from 'hono'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, type BlogTagConfig } from '@shared/blog/tags'
 import { getMeta, setMeta } from '../db/metadata'
 import type { AppBindings } from '../env'
 import { newId } from '../lib/id'
@@ -11,6 +12,8 @@ export const BLOG_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 export const BLOG_PASSWORD_KEY = (userId: string): string => `blog_password_hash:${userId}`
 export const BLOG_TITLE_KEY = (userId: string): string => `blog_title:${userId}`
 export const BLOG_DESCRIPTION_KEY = (userId: string): string => `blog_description:${userId}`
+export const BLOG_PUBLIC_TAG_KEY = (userId: string): string => `blog_public_tag:${userId}`
+export const BLOG_PRIVATE_TAG_KEY = (userId: string): string => `blog_private_tag:${userId}`
 export const BLOG_SESSION_COOKIE = (userId: string): string => `blog_session_${userId}`
 
 export async function setBlogPassword(db: D1Database, userId: string, password: string): Promise<void> {
@@ -63,6 +66,30 @@ export async function setBlogDescription(db: D1Database, userId: string, descrip
 
 export async function getBlogDescription(db: D1Database, userId: string): Promise<string | null> {
   return getMeta(db, BLOG_DESCRIPTION_KEY(userId))
+}
+
+export async function getBlogPublicTag(db: D1Database, userId: string): Promise<string> {
+  return (await getMeta(db, BLOG_PUBLIC_TAG_KEY(userId))) || BLOG_PUBLIC_TAG
+}
+
+export async function setBlogPublicTag(db: D1Database, userId: string, tag: string): Promise<void> {
+  await setMeta(db, BLOG_PUBLIC_TAG_KEY(userId), tag)
+}
+
+export async function getBlogPrivateTag(db: D1Database, userId: string): Promise<string> {
+  return (await getMeta(db, BLOG_PRIVATE_TAG_KEY(userId))) || BLOG_PRIVATE_TAG
+}
+
+export async function setBlogPrivateTag(db: D1Database, userId: string, tag: string): Promise<void> {
+  await setMeta(db, BLOG_PRIVATE_TAG_KEY(userId), tag)
+}
+
+export async function getBlogTagConfig(db: D1Database, userId: string): Promise<BlogTagConfig> {
+  const [publicTag, privateTag] = await Promise.all([
+    getBlogPublicTag(db, userId),
+    getBlogPrivateTag(db, userId),
+  ])
+  return { publicTag, privateTag }
 }
 
 export async function handleBlogAuth(

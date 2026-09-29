@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, blogTierOfTags, filterVisibleTags, isReservedBlogTag, RESERVED_BLOG_TAGS } from '../src/shared/blog/tags'
+import { BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, blogTierOfTags, hiddenBlogTags } from '../src/shared/blog/tags'
 
 describe('blog tier tags', () => {
   it('derives tier: none/public/private with private winning', () => {
@@ -9,13 +9,14 @@ describe('blog tier tags', () => {
     expect(blogTierOfTags([BLOG_PRIVATE_TAG])).toBe('private')
     expect(blogTierOfTags([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG])).toBe('private')
   })
-  it('recognizes reserved tags', () => {
-    expect(isReservedBlogTag(BLOG_PUBLIC_TAG)).toBe(true)
-    expect(isReservedBlogTag('x')).toBe(false)
-    expect(RESERVED_BLOG_TAGS).toEqual([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG])
+  it('respects custom config for tag names', () => {
+    const config = { publicTag: 'my-public', privateTag: 'my-private' }
+    expect(blogTierOfTags(['my-public'], config)).toBe('public')
+    expect(blogTierOfTags(['my-private'], config)).toBe('private')
+    expect(blogTierOfTags([BLOG_PUBLIC_TAG], config)).toBe('none')
   })
-  it('filters reserved tags from visible lists', () => {
-    const tags = [{ id: 'a', name: 'blog-public', color: null }, { id: 'b', name: 'work', color: null }]
-    expect(filterVisibleTags(tags).map((t) => t.name)).toEqual(['work'])
+  it('hiddenBlogTags returns the configured public and private tags', () => {
+    expect(hiddenBlogTags()).toEqual([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG])
+    expect(hiddenBlogTags({ publicTag: 'p', privateTag: 'q' })).toEqual(['p', 'q'])
   })
 })

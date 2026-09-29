@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { KeyRound, RefreshCw, Rss, Trash2 } from 'lucide-react'
+import { KeyRound, RefreshCw, Rss, Tag, Trash2 } from 'lucide-react'
 import { LIMITS } from '@shared/constants'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG } from '@shared/blog/tags'
 import { blogApi } from '../../blog/api'
 import { Button } from '../../components/primitives'
 import { Input } from '../../components/form'
@@ -10,7 +11,7 @@ import { useSession } from '../../store/session'
 import { useUi } from '../../store/ui'
 import { t } from '../../lib/i18n'
 
-type BusyAction = 'title' | 'description' | 'setPassword' | 'clearPassword' | null
+type BusyAction = 'title' | 'description' | 'publicTag' | 'privateTag' | 'setPassword' | 'clearPassword' | null
 
 export function BlogSettings() {
   const username = useSession((s) => s.user?.username)
@@ -20,6 +21,8 @@ export function BlogSettings() {
   const [hasCustomPassword, setHasCustomPassword] = useState(false)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [publicTag, setPublicTag] = useState(BLOG_PUBLIC_TAG)
+  const [privateTag, setPrivateTag] = useState(BLOG_PRIVATE_TAG)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<BusyAction>(null)
   const mountedRef = useRef(true)
@@ -34,6 +37,8 @@ export function BlogSettings() {
         setTitle(settings.title ?? '')
         setDescription(settings.description ?? '')
         setHasCustomPassword(settings.hasCustomPassword)
+        setPublicTag(settings.publicTag || BLOG_PUBLIC_TAG)
+        setPrivateTag(settings.privateTag || BLOG_PRIVATE_TAG)
       }
     } catch (error) {
       if (mountedRef.current) setLoadError(errorMessage(error))
@@ -91,6 +96,34 @@ export function BlogSettings() {
       await blogApi.updateSettings({ description: next })
       if (mountedRef.current) setDescription(next)
       toast({ title: t('settings.blog_description_saved'), tone: 'success' })
+    } catch (error) {
+      fail(error)
+    } finally {
+      finish()
+    }
+  }
+
+  const savePublicTag = async () => {
+    if (!begin('publicTag')) return
+    const next = publicTag.trim()
+    try {
+      await blogApi.updateSettings({ publicTag: next })
+      if (mountedRef.current) setPublicTag(next)
+      toast({ title: t('settings.blog_tag_saved'), tone: 'success' })
+    } catch (error) {
+      fail(error)
+    } finally {
+      finish()
+    }
+  }
+
+  const savePrivateTag = async () => {
+    if (!begin('privateTag')) return
+    const next = privateTag.trim()
+    try {
+      await blogApi.updateSettings({ privateTag: next })
+      if (mountedRef.current) setPrivateTag(next)
+      toast({ title: t('settings.blog_tag_saved'), tone: 'success' })
     } catch (error) {
       fail(error)
     } finally {
@@ -188,16 +221,54 @@ export function BlogSettings() {
         </div>
         <div>
           <label className="mb-1 block text-[11px] font-medium text-[var(--text-tertiary)]">{t('settings.blog_description')}</label>
-          <textarea
-            className="w-full resize-y rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] px-3 py-2 text-[13px] text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
-            rows={2}
-            maxLength={300}
-            value={description}
-            placeholder={t('settings.blog_description_placeholder')}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <div className="mt-2 flex justify-end">
+          <div className="flex items-start gap-2">
+            <textarea
+              value={description}
+              maxLength={300}
+              rows={2}
+              placeholder={t('settings.blog_description_placeholder')}
+              onChange={(e) => setDescription(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void saveDescription() }}
+              className="w-full flex-1 resize-y rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--bg-inset)] px-3 py-2 text-[13px] leading-relaxed text-[var(--text-primary)] outline-none transition-colors focus:border-[var(--accent)]"
+            />
             <Button size="sm" variant="secondary" loading={busy === 'description'} disabled={busy !== null} onClick={() => void saveDescription()}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[var(--r-lg)] border border-[var(--border-subtle)] bg-[var(--bg-base)] p-4 space-y-4">
+        <div className="flex items-center gap-2 text-[12px] text-[var(--text-tertiary)]">
+          <Tag size={13} />
+          <span>{t('settings.blog_tags_hint')}</span>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-[var(--text-tertiary)]">{t('settings.blog_public_tag')}</label>
+          <div className="flex gap-2">
+            <Input
+              value={publicTag}
+              maxLength={64}
+              placeholder={BLOG_PUBLIC_TAG}
+              onChange={(e) => setPublicTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void savePublicTag() }}
+            />
+            <Button size="sm" variant="secondary" loading={busy === 'publicTag'} disabled={busy !== null} onClick={() => void savePublicTag()}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-[11px] font-medium text-[var(--text-tertiary)]">{t('settings.blog_private_tag')}</label>
+          <div className="flex gap-2">
+            <Input
+              value={privateTag}
+              maxLength={64}
+              placeholder={BLOG_PRIVATE_TAG}
+              onChange={(e) => setPrivateTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void savePrivateTag() }}
+            />
+            <Button size="sm" variant="secondary" loading={busy === 'privateTag'} disabled={busy !== null} onClick={() => void savePrivateTag()}>
               {t('common.save')}
             </Button>
           </div>

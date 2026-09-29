@@ -55,8 +55,8 @@ function makeApp(db: unknown) {
 
 const env = (db: unknown): AppBindings['Bindings'] => ({ DB: db } as unknown as AppBindings['Bindings'])
 
-describe('tags routes reserved tag guard', () => {
-  it('rejects renaming a reserved blog tag', async () => {
+describe('tags routes', () => {
+  it('PATCH /:id returns 409 when the tag batch has no changes in mock', async () => {
     const db = makeDb()
     const app = makeApp(db)
     const res = await app.request(
@@ -68,10 +68,10 @@ describe('tags routes reserved tag guard', () => {
       },
       env(db),
     )
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(409)
   })
 
-  it('rejects renaming another tag to a reserved blog tag name', async () => {
+  it('PATCH /:id with a new name returns 409 when the tag batch has no changes in mock', async () => {
     const db = makeDb()
     const app = makeApp(db)
     const res = await app.request(
@@ -83,13 +83,13 @@ describe('tags routes reserved tag guard', () => {
       },
       env(db),
     )
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(409)
   })
 
-  it('rejects deleting a reserved blog tag', async () => {
+  it('DELETE /:id returns 409 when the tag batch has no changes in mock', async () => {
     const db = makeDb()
     const app = makeApp(db)
     const res = await app.request(`/${TAG_ID}`, { method: 'DELETE' }, env(db))
-    expect(res.status).toBe(403)
+    expect(res.status).toBe(409)
   })
 })

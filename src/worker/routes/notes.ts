@@ -11,7 +11,7 @@ import type {
   SortOrder,
   ViewKind,
 } from '@shared/types'
-import { blogTier, isMomentsFolder, syncBlogShare, withdrawBlogShare } from '../blog/publish'
+import { isMomentsFolder, syncBlogShare, withdrawBlogShare } from '../blog/publish'
 import type { AppBindings } from '../env'
 import { NOTE_COLUMNS, NOTE_COLUMNS_FULL, splitTags, toNote, toNoteSummary, type NoteRow } from '../db/rows'
 import {
@@ -523,10 +523,6 @@ notesRoutes.patch('/:id', async (c) => {
     throw ApiError.conflict('This note was modified elsewhere', { server: current })
   }
   if (contentChanged || folderChanged) {
-    const prevTier = blogTier(
-      await isMomentsFolder(c.env.DB, userId, row.folder_id),
-      splitTags(row.tag_names),
-    )
     const nextInMoments = folderChanged
       ? await isMomentsFolder(c.env.DB, userId, newFolderId)
       : await isMomentsFolder(c.env.DB, userId, row.folder_id)
@@ -535,7 +531,7 @@ notesRoutes.patch('/:id', async (c) => {
       userId,
       id,
       contentChanged ? (derivedTags ?? extractTags(newContent)) : splitTags(row.tag_names),
-      { inMoments: nextInMoments, prevTier },
+      { inMoments: nextInMoments },
     )
   }
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
@@ -641,9 +637,7 @@ notesRoutes.delete('/:id', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
-  if (blogTier(await isMomentsFolder(c.env.DB, userId, row.folder_id), splitTags(row.tag_names)) !== 'none') {
-    await withdrawBlogShare(c.env.DB, userId, id)
-  }
+  await withdrawBlogShare(c.env.DB, userId, id)
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
   await broadcastCursor(c, changeResult?.results?.[0]?.seq)
   scheduleFtsDrain(c)
@@ -977,7 +971,6 @@ notesRoutes.post('/:id/versions/:versionId/restore', async (c) => {
   const currentInMoments = await isMomentsFolder(c.env.DB, userId, current.folder_id)
   await syncBlogShare(c.env.DB, userId, id, extractTags(version.content), {
     inMoments: currentInMoments,
-    prevTier: blogTier(currentInMoments, splitTags(current.tag_names)),
   })
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')

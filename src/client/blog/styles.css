@@ -490,6 +490,7 @@
   color: var(--blog-text-soft);
   font-size: 14px;
   line-height: 1.6;
+  white-space: pre-line;
 }
 
 /* 9. Feed cards (row layout) ----------------------------------------------- */

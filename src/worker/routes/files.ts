@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { getCookie } from 'hono/cookie'
-import { BLOG_PRIVATE_TAG, MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
+import { MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import { extractAttachmentIds } from '@shared/markdown-utils'
 import type { Attachment } from '@shared/types'
@@ -15,7 +15,7 @@ import {
   type AttachmentObjectStorage,
 } from '../attachments/keys'
 import { persistAttachmentWithinQuota } from '../attachments/storage'
-import { BLOG_SESSION_COOKIE, validateBlogSession } from '../blog/auth'
+import { BLOG_SESSION_COOKIE, getBlogPrivateTag, validateBlogSession } from '../blog/auth'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { isValidId, isValidSlug, newId } from '../lib/id'
@@ -231,6 +231,7 @@ filesRoutes.get('/:id', async (c) => {
   const userId = c.get('userId')
   let allowed = Boolean(userId && userId === row.user_id)
   if (!allowed && isValidSlug(shareSlug)) {
+    const privateTag = await getBlogPrivateTag(c.env.DB, row.user_id)
     const share = await c.env.DB.prepare(
       `SELECT s.slug, s.password_hash,
               (EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
@@ -243,7 +244,7 @@ filesRoutes.get('/:id', async (c) => {
          WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
            AND (s.expires_at IS NULL OR s.expires_at > ?3)`,
     )
-      .bind(shareSlug, row.user_id, Date.now(), BLOG_PRIVATE_TAG, MOMENTS_FOLDER_NAME)
+      .bind(shareSlug, row.user_id, Date.now(), privateTag, MOMENTS_FOLDER_NAME)
       .first<{
         slug: string
         password_hash: string | null

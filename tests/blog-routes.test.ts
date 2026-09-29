@@ -43,7 +43,7 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[] } {
             async all<T = unknown>() {
               if (sql.includes('SELECT locked_until FROM login_attempts'))
                 return { results: [] as T[] }
-              if (sql.includes("t.name = 'blog-private'"))
+              if (sql.includes('JOIN note_tags nt ON nt.note_id = n.id'))
                 return { results: (options.blogPrivateNoteIds ?? []).map((id) => ({ id })) as T[] }
               if (sql.includes('LIMIT ?3 OFFSET ?4'))
                 return { results: posts as T[] }
@@ -229,8 +229,8 @@ describe('blog routes', () => {
     const app = makeApp()
     const res = await app.request('/alice/posts', {}, env(db))
     expect(res.status).toBe(200)
-    const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ?3 OFFSET ?4'))
-    expect(postsSql).toContain("= 'blog-public'")
+    const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ? OFFSET ?'))
+    expect(postsSql).toContain('t2.name = ?')
   })
 
   it('a valid session on /posts serves the all tier', async () => {
@@ -243,8 +243,8 @@ describe('blog routes', () => {
       env(db),
     )
     expect(res.status).toBe(200)
-    const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ?3 OFFSET ?4'))
-    expect(postsSql).toContain("IN ('blog-public', 'blog-private')")
+    const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ? OFFSET ?'))
+    expect(postsSql).toContain('IN (?, ?)')
   })
 
   it('returns 200 for a protected blog with a valid session cookie', async () => {
@@ -330,14 +330,14 @@ describe('blog routes', () => {
     const app = makeAuthedApp()
     const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' }, meta })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ hasCustomPassword: true, title: null, description: null })
+    expect(await res.json()).toEqual({ hasCustomPassword: true, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private' })
   })
 
   it('GET /settings reports hasCustomPassword false when no custom password is set', async () => {
     const app = makeAuthedApp()
     const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' } })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ hasCustomPassword: false, title: null, description: null })
+    expect(await res.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private' })
   })
 
   it('PUT /settings with password null clears the custom password and re-hashes blog-private shares', async () => {
@@ -382,7 +382,7 @@ describe('blog routes', () => {
     expect(meta.get('blog_password_hash:u1')).toBe('')
 
     const settings = await app.request('/settings', {}, env(db))
-    expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null, description: null })
+    expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private' })
 
     const auth = await app.request(
       '/alice/auth',
@@ -418,7 +418,7 @@ describe('blog routes', () => {
     expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(true)
 
     const settings = await app.request('/settings', {}, env(db))
-    expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null, description: null })
+    expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private' })
 
     const oldAuth = await app.request(
       '/alice/auth',

@@ -14,8 +14,9 @@ function formatDate(ts: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-export default function MomentsPage({ username }: {
+export default function MomentsPage({ username, hiddenTags }: {
   username: string
+  hiddenTags?: string[]
 }) {
   const [page, setPage] = useState(1)
   const [moments, setMoments] = useState<MomentItem[]>([])
@@ -53,7 +54,7 @@ export default function MomentsPage({ username }: {
       ) : (
         <div className="blog-moments-feed">
           {moments.map((moment) => {
-            const tags = visibleTags(moment.tags)
+            const tags = visibleTags(moment.tags, hiddenTags)
             return (
               <article key={moment.id} className="blog-moment">
                 <div className="blog-moment-time">

@@ -133,30 +133,23 @@ describe('blog publish', () => {
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
   })
 
-  it('syncBlogShare does nothing for no blog tags and no prev tags (manual shares preserved)', async () => {
+  it('syncBlogShare withdraws for no blog tags', async () => {
     const db = makeDb([])
     await syncBlogShare(db, 'u1', 'n1', [])
-    expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
-    expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
-  })
-
-  it('syncBlogShare does nothing for no blog tags when prev tags were never a blog article', async () => {
-    const db = makeDb([])
-    await syncBlogShare(db, 'u1', 'n1', [], { prevTier: 'none' })
-    expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
+    expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
   })
 
   it('syncBlogShare withdraws when a blog article loses its blog tag', async () => {
     const db = makeDb([])
-    await syncBlogShare(db, 'u1', 'n1', ['plain'], { prevTier: 'public' })
+    await syncBlogShare(db, 'u1', 'n1', ['plain'])
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
   })
 
   it('syncBlogShare withdraws when a private blog article loses its blog tag', async () => {
     const db = makeDb([])
-    await syncBlogShare(db, 'u1', 'n1', [], { prevTier: 'private' })
+    await syncBlogShare(db, 'u1', 'n1', [])
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
   })
 
@@ -176,7 +169,7 @@ describe('blog publish', () => {
 
   it('syncBlogShare withdraws when a Moments-folder note leaves the folder', async () => {
     const db = makeDb([])
-    await syncBlogShare(db, 'u1', 'n1', [], { inMoments: false, prevTier: 'private' })
+    await syncBlogShare(db, 'u1', 'n1', [], { inMoments: false })
     expect(hasSql(db, 'DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
     expect(hasSql(db, 'INSERT OR IGNORE INTO shares')).toBe(false)
   })

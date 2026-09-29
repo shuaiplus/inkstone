@@ -22,10 +22,11 @@ function pageNumbers(current: number, total: number): (number | 'ellipsis')[] {
   return out
 }
 
-export default function FeedPage({ username, title, description }: {
+export default function FeedPage({ username, title, description, hiddenTags }: {
   username: string
   title?: string
   description?: string
+  hiddenTags?: string[]
 }) {
   const [page, setPage] = useState(1)
   const { status, data } = useBlogQuery<BlogPostsResponse>(
@@ -64,7 +65,7 @@ export default function FeedPage({ username, title, description }: {
       ) : (
         <div className="blog-feed-list">
           {data.posts.map((post) => (
-            <FeedCard key={post.id} post={post} username={username} />
+            <FeedCard key={post.id} post={post} username={username} hiddenTags={hiddenTags} />
           ))}
         </div>
       )}

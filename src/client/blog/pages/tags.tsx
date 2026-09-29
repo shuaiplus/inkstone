@@ -2,10 +2,12 @@
 import type { BlogTag } from '@shared/blog/types'
 import LoginPage from './login'
 import { useBlogQuery } from './use-blog-query'
+import { visibleTags } from '../filter-tags'
 import { t } from '../../lib/i18n'
 
-export default function TagsPage({ username }: {
+export default function TagsPage({ username, hiddenTags }: {
   username: string
+  hiddenTags?: string[]
 }) {
   const { status, data } = useBlogQuery<{ tags: BlogTag[] }>(
     () => blogApi.tags(username),
@@ -24,7 +26,7 @@ export default function TagsPage({ username }: {
     )
 
   const base = `/blog/${encodeURIComponent(username)}`
-  const visible = data.tags.filter((tag) => !['blog-public', 'blog-private'].includes(tag.name))
+  const visible = data.tags.filter((tag) => visibleTags([tag.name], hiddenTags).length > 0)
   return (
     <div>
       <h1 className="blog-section-title">{t('blog.tags')}</h1>

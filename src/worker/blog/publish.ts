@@ -1,8 +1,7 @@
-import { blogTierOfTags, MOMENTS_FOLDER_NAME, BLOG_PRIVATE_TAG } from '@shared/blog/tags'
-import type { BlogTier } from '@shared/blog/tags'
+import { blogTierOfTags, MOMENTS_FOLDER_NAME, type BlogTagConfig, type BlogTier } from '@shared/blog/tags'
 import { getMeta, setMeta } from '../db/metadata'
 import { newSlug } from '../lib/id'
-import { getBlogPasswordHash } from './auth'
+import { getBlogPasswordHash, getBlogTagConfig } from './auth'
 
 export { getBlogPasswordHash }
 
@@ -10,11 +9,13 @@ const TAG_SUBQUERY_RECONCILE = `(SELECT GROUP_CONCAT(t.name, char(1)) FROM note_
      JOIN tags t ON t.id = nt.tag_id
     WHERE nt.note_id = n.id AND t.user_id = n.user_id)`
 
-export function blogTier(inMoments: boolean, tags: readonly string[]): BlogTier {
+export function blogTier(inMoments: boolean, tags: readonly string[], config?: BlogTagConfig): BlogTier {
   if (inMoments) {
-    return tags.includes(BLOG_PRIVATE_TAG) ? 'private' : 'public'
+    const privateTag = config?.privateTag
+    if (privateTag && tags.includes(privateTag)) return 'private'
+    return 'public'
   }
-  return blogTierOfTags(tags)
+  return blogTierOfTags(tags, config)
 }
 
 export async function isMomentsFolder(db: D1Database, userId: string, folderId: string | null): Promise<boolean> {
@@ -62,13 +63,12 @@ export async function syncBlogShare(
   userId: string,
   noteId: string,
   tags: readonly string[],
-  opts?: { inMoments?: boolean; prevTier?: BlogTier },
+  opts?: { inMoments?: boolean },
 ): Promise<void> {
-  const tier = blogTier(opts?.inMoments ?? false, tags)
+  const config = await getBlogTagConfig(db, userId)
+  const tier = blogTier(opts?.inMoments ?? false, tags, config)
   if (tier === 'none') {
-    if (opts?.prevTier !== undefined && opts.prevTier !== 'none') {
-      await withdrawBlogShare(db, userId, noteId)
-    }
+    await withdrawBlogShare(db, userId, noteId)
     return
   }
   await ensureBlogShare(db, userId, noteId, tier, await getBlogPasswordHash(db, userId))
@@ -88,6 +88,7 @@ export async function reconcileMomentsShares(db: D1Database): Promise<void> {
     .bind(MOMENTS_FOLDER_NAME)
     .all<{ user_id: string }>()
   for (const { user_id: userId } of results) {
+    const config = await getBlogTagConfig(db, userId)
     const moments = await db
       .prepare(
         `SELECT n.id AS id, ${TAG_SUBQUERY_RECONCILE} FROM notes n
@@ -100,7 +101,7 @@ export async function reconcileMomentsShares(db: D1Database): Promise<void> {
     const passwordHash = await getBlogPasswordHash(db, userId)
     for (const note of moments.results) {
       const tags = note.tag_names ? note.tag_names.split('\u0001') : []
-      const tier: BlogTier = tags.includes(BLOG_PRIVATE_TAG) ? 'private' : 'public'
+      const tier: BlogTier = tags.includes(config.privateTag) ? 'private' : 'public'
       await ensureBlogShare(db, userId, note.id, tier, passwordHash)
     }
   }

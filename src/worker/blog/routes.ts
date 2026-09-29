@@ -1,7 +1,6 @@
 import { Hono, type Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { LIMITS } from '@shared/constants'
-import { BLOG_PRIVATE_TAG } from '@shared/blog/tags'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { readJson, requestClientIp } from '../lib/request'
@@ -17,6 +16,8 @@ import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie, BLOG_SESSION_COOKIE,
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
   setBlogDescription, getBlogDescription,
+  getBlogPrivateTag, setBlogPublicTag, setBlogPrivateTag,
+  getBlogTagConfig,
   clearBlogSession, deleteBlogSessionCookie,
 } from './auth'
 import { getBlogPasswordHash, ensureBlogShare } from './publish'
@@ -32,23 +33,27 @@ blogRoutes.use('/settings', requireAuth)
 
 blogRoutes.get('/settings', async (c) => {
   const userId = c.get('userId')
+  const config = await getBlogTagConfig(c.env.DB, userId)
   return c.json({
     hasCustomPassword: await hasBlogPassword(c.env.DB, userId),
     title: await getBlogTitle(c.env.DB, userId),
     description: await getBlogDescription(c.env.DB, userId),
+    publicTag: config.publicTag,
+    privateTag: config.privateTag,
   })
 })
 
 async function rehashBlogPrivateShares(db: D1Database, userId: string): Promise<void> {
+  const privateTag = await getBlogPrivateTag(db, userId)
   const newHash = await getBlogPasswordHash(db, userId)
   const { results } = await db
     .prepare(
       `SELECT n.id FROM notes n
         JOIN note_tags nt ON nt.note_id = n.id
         JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
-       WHERE n.user_id = ?1 AND n.deleted_at IS NULL AND t.name = '${BLOG_PRIVATE_TAG}'`,
+       WHERE n.user_id = ?1 AND n.deleted_at IS NULL AND t.name = ?2`,
     )
-    .bind(userId)
+    .bind(userId, privateTag)
     .all<{ id: string }>()
   for (const row of results) {
     await ensureBlogShare(db, userId, row.id, 'private', newHash)
@@ -57,7 +62,13 @@ async function rehashBlogPrivateShares(db: D1Database, userId: string): Promise<
 
 blogRoutes.put('/settings', async (c) => {
   const userId = c.get('userId')
-  const body = await readJson<{ password?: string | null; title?: string; description?: string | null }>(c, 4096)
+  const body = await readJson<{
+    password?: string | null
+    title?: string
+    description?: string | null
+    publicTag?: string
+    privateTag?: string
+  }>(c, 4096)
   if (body.password !== undefined) {
     if (typeof body.password === 'string' && body.password.length > LIMITS.passwordMaxLength) {
       throw ApiError.badRequest(`The blog password must not exceed ${LIMITS.passwordMaxLength} characters`)
@@ -68,6 +79,14 @@ blogRoutes.put('/settings', async (c) => {
   }
   if (body.title !== undefined) await setBlogTitle(c.env.DB, userId, body.title)
   if (body.description !== undefined) await setBlogDescription(c.env.DB, userId, body.description ?? '')
+  if (body.publicTag !== undefined) {
+    const tag = body.publicTag.trim()
+    if (tag) await setBlogPublicTag(c.env.DB, userId, tag)
+  }
+  if (body.privateTag !== undefined) {
+    const tag = body.privateTag.trim()
+    if (tag) await setBlogPrivateTag(c.env.DB, userId, tag)
+  }
   return c.json({ ok: true })
 })
 
@@ -130,10 +149,13 @@ blogRoutes.post('/:username/auth', async (c) => {
 blogRoutes.get('/:username/meta', async (c) => {
   const userId = c.get('blogOwnerId')!
   const username = c.req.param('username')
+  const config = await getBlogTagConfig(c.env.DB, userId)
   return c.json({
     username,
     title: await getBlogTitle(c.env.DB, userId),
     description: await getBlogDescription(c.env.DB, userId),
+    publicTag: config.publicTag,
+    privateTag: config.privateTag,
   })
 })
 
@@ -155,44 +177,50 @@ blogRoutes.post('/:username/logout', async (c) => {
 
 blogRoutes.get('/:username/posts', async (c) => {
   const userId = c.get('blogOwnerId')!
+  const config = await getBlogTagConfig(c.env.DB, userId)
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)
   const limit = Math.min(50, Math.max(1, parseInt(c.req.query('limit') ?? '10', 10) || 10))
-  return c.json(await listBlogPosts(c.env.DB, userId, requestTier(c), page, limit))
+  return c.json(await listBlogPosts(c.env.DB, userId, requestTier(c), page, limit, config))
 })
 
 blogRoutes.get('/:username/posts/:slug', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), 'all')
+  const config = await getBlogTagConfig(c.env.DB, userId)
+  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), 'all', config)
   if (!post) return c.json({ error: { code: 'not_found', message: 'Post not found' } }, 404)
-  if (post.tags.includes(BLOG_PRIVATE_TAG) && !c.get('blogAuthed')) {
+  if (post.tags.includes(config.privateTag) && !c.get('blogAuthed')) {
     return c.json({ error: { code: 'blog_auth_required', message: 'Blog authentication required' } }, 401)
   }
-  const adjacent = await getAdjacentPosts(c.env.DB, userId, requestTier(c), post.created_at, post.id)
+  const adjacent = await getAdjacentPosts(c.env.DB, userId, requestTier(c), post.created_at, post.id, config)
   return c.json({ ...post, previous: adjacent.previous, next: adjacent.next })
 })
 
 blogRoutes.get('/:username/moments', async (c) => {
   const userId = c.get('blogOwnerId')!
+  const config = await getBlogTagConfig(c.env.DB, userId)
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') ?? '20', 10) || 20))
-  return c.json(await listBlogMoments(c.env.DB, userId, requestTier(c), page, limit))
+  return c.json(await listBlogMoments(c.env.DB, userId, requestTier(c), page, limit, config))
 })
 
 blogRoutes.get('/:username/timeline', async (c) => {
   const userId = c.get('blogOwnerId')!
+  const config = await getBlogTagConfig(c.env.DB, userId)
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') ?? '20', 10) || 20))
-  return c.json(await listBlogTimeline(c.env.DB, userId, requestTier(c), page, limit))
+  return c.json(await listBlogTimeline(c.env.DB, userId, requestTier(c), page, limit, config))
 })
 
 blogRoutes.get('/:username/tags', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const tags = await listBlogTags(c.env.DB, userId, requestTier(c))
+  const config = await getBlogTagConfig(c.env.DB, userId)
+  const tags = await listBlogTags(c.env.DB, userId, requestTier(c), config)
   return c.json({ tags })
 })
 
 blogRoutes.get('/:username/tags/:name', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const posts = await listPostsByTag(c.env.DB, userId, c.req.param('name'), requestTier(c))
+  const config = await getBlogTagConfig(c.env.DB, userId)
+  const posts = await listPostsByTag(c.env.DB, userId, c.req.param('name'), requestTier(c), config)
   return c.json({ name: c.req.param('name'), posts })
 })

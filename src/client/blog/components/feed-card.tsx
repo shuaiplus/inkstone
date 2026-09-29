@@ -10,14 +10,15 @@ function formatDate(ts: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-export function FeedCard({ post, username }: {
+export function FeedCard({ post, username, hiddenTags }: {
   post: BlogPostSummary
   username: string
+  hiddenTags?: string[]
 }) {
   const base = `/blog/${encodeURIComponent(username)}`
   const cover = coverSrc(post)
   const href = `${base}/posts/${encodeURIComponent(post.slug)}`
-  const tags = visibleTags(post.tags)
+  const tags = visibleTags(post.tags, hiddenTags)
   return (
     <article className="blog-feed-card">
       <a className="blog-feed-card-link" href={href} aria-label={post.title}>

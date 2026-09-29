@@ -1,7 +1,6 @@
-import { RESERVED_BLOG_TAGS } from '@shared/blog/tags'
+const HIDDEN = new Set<string>()
 
-const HIDDEN = new Set(RESERVED_BLOG_TAGS)
-
-export function visibleTags(tags: readonly string[]): string[] {
-  return tags.filter((t) => !HIDDEN.has(t))
+export function visibleTags(tags: readonly string[], hidden?: string[]): string[] {
+  const set = hidden ? new Set(hidden) : HIDDEN
+  return tags.filter((t) => !set.has(t))
 }

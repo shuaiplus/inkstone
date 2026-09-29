@@ -23,9 +23,10 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-export default function PostPage({ username, slug }: {
+export default function PostPage({ username, slug, hiddenTags }: {
   username: string
   slug: string
+  hiddenTags?: string[]
 }) {
   const decodedSlug = safeDecodeURIComponent(slug)
   const { status, data } = useBlogQuery<BlogPostDetail>(
@@ -45,7 +46,7 @@ export default function PostPage({ username, slug }: {
     )
 
   const base = `/blog/${encodeURIComponent(username)}`
-  const tags = visibleTags(data.tags)
+  const tags = visibleTags(data.tags, hiddenTags)
   return (
     <div className="blog-post-page">
       <div className="blog-post-content">

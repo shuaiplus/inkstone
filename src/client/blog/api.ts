@@ -29,6 +29,22 @@ export async function blogLogin(username: string, password: string): Promise<boo
   return res.ok
 }
 
+export interface BlogMeta {
+  username: string
+  title: string | null
+  description: string | null
+  publicTag: string
+  privateTag: string
+}
+
+export interface BlogSettings {
+  hasCustomPassword: boolean
+  title: string | null
+  description: string | null
+  publicTag: string
+  privateTag: string
+}
+
 export const blogApi = {
   auth: blogLogin,
   session: (username: string) =>
@@ -36,7 +52,7 @@ export const blogApi = {
   logout: (username: string) =>
     blogFetch<{ ok: true }>(`/${encodeURIComponent(username)}/logout`, { method: 'POST' }),
   meta: (username: string) =>
-    blogFetch<{ username: string; title: string | null; description: string | null }>(`/${encodeURIComponent(username)}/meta`),
+    blogFetch<BlogMeta>(`/${encodeURIComponent(username)}/meta`),
   posts: (username: string, page = 1, limit = 10) =>
     blogFetch<BlogPostsResponse>(`/${encodeURIComponent(username)}/posts?page=${page}&limit=${limit}`),
   post: (username: string, slug: string) =>
@@ -50,7 +66,7 @@ export const blogApi = {
   tag: (username: string, name: string) =>
     blogFetch<{ name: string; posts: BlogPostSummary[] }>(`/${encodeURIComponent(username)}/tags/${encodeURIComponent(name)}`),
   settings: () =>
-    blogFetch<{ hasCustomPassword: boolean; title: string | null; description: string | null }>('/settings'),
-  updateSettings: (body: { password?: string | null; title?: string; description?: string | null }) =>
+    blogFetch<BlogSettings>('/settings'),
+  updateSettings: (body: { password?: string | null; title?: string; description?: string | null; publicTag?: string; privateTag?: string }) =>
     blogFetch<{ ok: true }>('/settings', { method: 'PUT', body: JSON.stringify(body) }),
 }

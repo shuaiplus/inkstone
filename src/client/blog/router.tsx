@@ -1,5 +1,5 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentType, type LazyExoticComponent, type ReactNode } from 'react'
-import { blogApi, BlogAuthError } from './api'
+import { blogApi, BlogAuthError, type BlogMeta } from './api'
 import { BlogHeader } from './components/header'
 import { BlogFooter } from './components/footer'
 import { t } from '../lib/i18n'
@@ -71,7 +71,7 @@ class AuthBoundary extends Component<AuthBoundaryProps, AuthBoundaryState> {
   }
 }
 
-const metaCache = new Map<string, { title?: string; description?: string | null }>()
+const metaCache = new Map<string, BlogMeta>()
 
 export default function BlogApp({ username }: {
   username: string
@@ -130,25 +130,27 @@ export default function BlogApp({ username }: {
   }, [theme])
 
   const { Component, props } = matchRoute(username, path)
-  const [meta, setMeta] = useState<{ title?: string; description?: string | null }>(() => metaCache.get(username) ?? {})
+  const [meta, setMeta] = useState<BlogMeta | undefined>(() => metaCache.get(username))
   useEffect(() => {
     let cancelled = false
     blogApi.meta(username)
       .then((m) => {
         if (cancelled) return
-        const next = { title: m.title ?? undefined, description: m.description }
-        metaCache.set(username, next)
-        setMeta(next)
+        metaCache.set(username, m)
+        setMeta(m)
       })
       .catch(() => {})
     return () => { cancelled = true }
   }, [username])
+
+  const hiddenTags = meta ? [meta.publicTag, meta.privateTag] : []
+
   return (
     <div ref={appRef} className="blog-app" data-theme={theme}>
       <div className="blog-read-progress" aria-hidden />
       <BlogHeader
         username={username}
-        title={meta.title}
+        title={meta?.title ?? undefined}
         path={path}
         theme={theme}
         onToggleTheme={toggleTheme}
@@ -159,8 +161,9 @@ export default function BlogApp({ username }: {
             <Component
               key={`${username}:${path}`}
               {...props}
-              title={meta.title}
-              description={meta.description ?? undefined}
+        title={meta?.title ?? undefined}
+              description={meta?.description ?? undefined}
+              hiddenTags={hiddenTags}
             />
           </Suspense>
         </AuthBoundary>
