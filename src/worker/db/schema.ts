@@ -1,7 +1,6 @@
 /** Defines the idempotent final D1 schema initialized by every Worker isolate. */
 import type { DatabaseState, Env } from '../env'
 import { getMeta, setMeta } from './metadata'
-import { reconcileMomentsShares } from '../blog/publish'
 
 
 export const SCHEMA_STATEMENTS: readonly string[] = [
@@ -343,7 +342,7 @@ interface SchemaMigration {
   skipIfColumnExists?: { table: string; column: string }
 }
 
-export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
+const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   {
     // Explicit whitelist (not a regex over SCHEMA_STATEMENTS) so later
     // additions like mcp_api_keys can never be picked up accidentally.
@@ -653,10 +652,7 @@ export function initializeDatabase(env: Env): Promise<DatabaseState> {
   const existing = initializationCache.get(env.DB)
   if (existing) return existing
 
-  const pending = createSchema(env.DB).then(async (state) => {
-    await reconcileMomentsShares(env.DB)
-    return state
-  }).catch((error) => {
+  const pending = createSchema(env.DB).catch((error) => {
     initializationCache.delete(env.DB)
     throw error
   })
