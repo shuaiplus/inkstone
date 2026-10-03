@@ -2281,6 +2281,17 @@ a.blog-chip:hover {
   }
 }
 
+/* Compact header (JS-measured overflow): hide the text nav and always show
+   the menu toggle, even on desktop. The menu panel already lists every nav
+   item plus login and theme, so nothing becomes unreachable. */
+.blog-header--compact .blog-nav {
+  display: none;
+}
+
+.blog-header--compact .blog-menu-toggle {
+  display: inline-grid;
+}
+
 @media (min-width: 1080px) {
   .blog-feed-card-thumb {
     width: 220px;

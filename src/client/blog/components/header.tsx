@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { t } from '../../lib/i18n'
 import type { BlogTheme } from '../theme'
 
@@ -76,6 +76,10 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
   onToggleTheme: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [compact, setCompact] = useState(false)
+  const innerRef = useRef<HTMLDivElement>(null)
+  const compactRef = useRef(false)
+  const lastWidthRef = useRef(0)
   const base = `/blog/${encodeURIComponent(username)}`
   const navItems = [
     { label: t('blog.articles'), path: '', icon: ARTICLES_ICON },
@@ -97,6 +101,51 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
     return () => document.removeEventListener('keydown', onKey)
   }, [menuOpen])
 
+  // Collapse the text nav into the menu button when measured content
+  // overflows the header (long titles, translations, narrow windows).
+  // Viewport breakpoints can't see actual text widths, so measure instead.
+  useEffect(() => {
+    const inner = innerRef.current
+    if (!inner) return
+    const evaluate = () => {
+      const avail = inner.clientWidth
+      if (window.innerWidth < 768) {
+        if (compactRef.current) {
+          compactRef.current = false
+          setCompact(false)
+        }
+        lastWidthRef.current = avail
+        return
+      }
+      if (compactRef.current) {
+        // Collapsed: nav is hidden so its width is unmeasurable.
+        // Only reconsider after meaningful growth; the observer will
+        // re-measure once expanded. Hysteresis prevents flapping.
+        if (avail > lastWidthRef.current + 48) {
+          compactRef.current = false
+          setCompact(false)
+        } else {
+          lastWidthRef.current = avail
+        }
+        return
+      }
+      const brand = inner.querySelector<HTMLElement>('.blog-brand')
+      const nav = inner.querySelector<HTMLElement>('.blog-nav')
+      const actions = inner.querySelector<HTMLElement>('.blog-header-actions')
+      if (!brand || !nav || !actions) return
+      const needed = brand.offsetWidth + nav.scrollWidth + actions.offsetWidth + 16
+      if (needed > avail) {
+        compactRef.current = true
+        setCompact(true)
+      }
+      lastWidthRef.current = avail
+    }
+    const ro = new ResizeObserver(() => evaluate())
+    ro.observe(inner)
+    evaluate()
+    return () => ro.disconnect()
+  }, [title, username, path])
+
   const isActive = (itemPath: string): boolean => {
     if (itemPath === '') return path === base || path === `${base}/`
     return path.startsWith(`${base}${itemPath}`)
@@ -107,8 +156,8 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
 
   return (
     <>
-      <header className="blog-header">
-        <div className="blog-header-inner">
+      <header className={`blog-header${compact ? ' blog-header--compact' : ''}`}>
+        <div className="blog-header-inner" ref={innerRef}>
           <a className="blog-brand" href={base}>
             {BRAND_MARK}
             <span className="blog-brand-name">{title || username}</span>
