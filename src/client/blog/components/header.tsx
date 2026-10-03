@@ -130,7 +130,7 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
           </nav>
           <div className="blog-header-actions">
             <a
-              className="blog-icon-btn blog-icon-btn--quick"
+              className="blog-icon-btn blog-icon-btn--quick blog-icon-btn--articles"
               href={base}
               aria-label={t('blog.articles')}
               title={t('blog.articles')}
@@ -138,7 +138,7 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
               {ARTICLES_ICON}
             </a>
             <a
-              className="blog-icon-btn blog-icon-btn--quick"
+              className="blog-icon-btn blog-icon-btn--quick blog-icon-btn--moments"
               href={momentsHref}
               aria-label={t('blog.moments')}
               title={t('blog.moments')}
@@ -155,7 +155,7 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
             </a>
             <button
               type="button"
-              className="blog-icon-btn"
+              className="blog-icon-btn blog-icon-btn--theme"
               onClick={onToggleTheme}
               aria-label={themeLabel}
               title={themeLabel}

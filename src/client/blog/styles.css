@@ -211,7 +211,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--blog-text);
   text-decoration: none;
 }
@@ -233,6 +234,8 @@
   font-weight: 800;
   letter-spacing: -0.01em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--blog-text);
 }
 
@@ -281,6 +284,10 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
+}
+
+.blog-header-actions > * {
+  flex: none;
 }
 
 .blog-icon-btn {
@@ -2301,5 +2308,31 @@ a.blog-chip:hover {
 
   .blog-prose {
     font-size: 15.5px;
+  }
+}
+
+/* Narrow screens: hide header action icons one by one from left to right.
+   The menu toggle is always kept visible. */
+@media (max-width: 600px) {
+  .blog-header-actions .blog-icon-btn--articles {
+    display: none;
+  }
+}
+
+@media (max-width: 540px) {
+  .blog-header-actions .blog-icon-btn--moments {
+    display: none;
+  }
+}
+
+@media (max-width: 460px) {
+  .blog-header-actions .blog-icon-btn--lock {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .blog-header-actions .blog-icon-btn--theme {
+    display: none;
   }
 }
