@@ -77,6 +77,8 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [compact, setCompact] = useState(false)
+  // How many of the 5 action icons fit (menu > theme > lock > moments > articles).
+  const [visibleIcons, setVisibleIcons] = useState(5)
   const innerRef = useRef<HTMLDivElement>(null)
   const compactRef = useRef(false)
   const lastWidthRef = useRef(0)
@@ -104,19 +106,38 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
   // Collapse the text nav into the menu button when measured content
   // overflows the header (long titles, translations, narrow windows).
   // Viewport breakpoints can't see actual text widths, so measure instead.
+  // Icon buttons are measured the same way: read one button's width and the
+  // actions gap from the DOM (so CSS tweaks never desync the math), then
+  // compute how many fit after the (variable-width) brand.
+  // Priority to keep: menu > theme > lock > moments > articles.
   useEffect(() => {
     const inner = innerRef.current
     if (!inner) return
     const evaluate = () => {
-      const avail = inner.clientWidth
+      // clientWidth includes padding; children must fit the content box.
+      const style = window.getComputedStyle(inner)
+      const avail = inner.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+      const brand = inner.querySelector<HTMLElement>('.blog-brand')
+      const actions = inner.querySelector<HTMLElement>('.blog-header-actions')
+      if (!brand || !actions) return
       if (window.innerWidth < 768) {
+        // Mobile: text nav is hidden by CSS; fit icons into measured space.
         if (compactRef.current) {
           compactRef.current = false
           setCompact(false)
         }
+        const menuBtn = actions.querySelector<HTMLElement>('.blog-menu-toggle')
+        const btnW = menuBtn?.offsetWidth || 40
+        const gap = parseFloat(window.getComputedStyle(actions).columnGap) || 0
+        const slot = btnW + gap
+        const space = avail - brand.offsetWidth - 8
+        const n = Math.max(1, Math.min(5, Math.floor((space + gap) / slot)))
+        setVisibleIcons(n)
         lastWidthRef.current = avail
         return
       }
+      // Desktop: all relevant icons stay; manage text nav.
+      setVisibleIcons(5)
       if (compactRef.current) {
         // Collapsed: nav is hidden so its width is unmeasurable.
         // Only reconsider after meaningful growth; the observer will
@@ -129,10 +150,8 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
         }
         return
       }
-      const brand = inner.querySelector<HTMLElement>('.blog-brand')
       const nav = inner.querySelector<HTMLElement>('.blog-nav')
-      const actions = inner.querySelector<HTMLElement>('.blog-header-actions')
-      if (!brand || !nav || !actions) return
+      if (!nav) return
       const needed = brand.offsetWidth + nav.scrollWidth + actions.offsetWidth + 16
       if (needed > avail) {
         compactRef.current = true
@@ -153,10 +172,16 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
 
   const themeLabel = theme === 'dark' ? t('blog.to_light') : t('blog.to_dark')
   const momentsHref = `${base}/moments`
+  const hideClasses = [
+    visibleIcons < 5 ? 'blog-header--hide-articles' : '',
+    visibleIcons < 4 ? 'blog-header--hide-moments' : '',
+    visibleIcons < 3 ? 'blog-header--hide-lock' : '',
+    visibleIcons < 2 ? 'blog-header--hide-theme' : '',
+  ].filter(Boolean).join(' ')
 
   return (
     <>
-      <header className={`blog-header${compact ? ' blog-header--compact' : ''}`}>
+      <header className={`blog-header${compact ? ' blog-header--compact' : ''}${hideClasses ? ` ${hideClasses}` : ''}`}>
         <div className="blog-header-inner" ref={innerRef}>
           <a className="blog-brand" href={base}>
             {BRAND_MARK}
