@@ -29,7 +29,6 @@ worker-configuration.d.ts
 *.sqlite3
 
 # Local tools, indexes, editors and reference checkouts
-.kilo/
 .claude/
 .codex/
 .codegraph/

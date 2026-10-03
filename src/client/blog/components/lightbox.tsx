@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { t } from '../../lib/i18n'
 
 function useEscape(active: boolean, onEscape: () => void) {
   const ref = useRef(onEscape)
@@ -171,7 +172,7 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
     >
       {failed ? (
         <div className="blog-lightbox-failed">
-          <p>Image failed to load</p>
+          <p>{t('blog.image_failed_to_load')}</p>
         </div>
       ) : (
         <img
@@ -188,8 +189,8 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
       <button
         type="button"
         className="blog-lightbox-close"
-        onClick={(e) => { e.stopPropagation(); onClose() }}
-        aria-label="Close"
+          onClick={(e) => { e.stopPropagation(); onClose() }}
+          aria-label={t('blog.close')}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <path d="M6 6l12 12M6 18L18 6" />
@@ -202,7 +203,7 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
             className="blog-lightbox-arrow blog-lightbox-arrow--prev"
             disabled={!hasPrev}
             onClick={(e) => { e.stopPropagation(); if (hasPrev) onNavigate(index - 1) }}
-            aria-label="Previous"
+            aria-label={t('blog.previous_image')}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
           </button>
@@ -211,7 +212,7 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
             className="blog-lightbox-arrow blog-lightbox-arrow--next"
             disabled={!hasNext}
             onClick={(e) => { e.stopPropagation(); if (hasNext) onNavigate(index + 1) }}
-            aria-label="Next"
+            aria-label={t('blog.next_image')}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
           </button>
@@ -224,7 +225,7 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
           className="blog-lightbox-btn"
           disabled={failed || scale <= 0.3}
           onClick={() => setScale((s) => Math.max(0.3, s - 0.25))}
-          aria-label="Zoom out"
+          aria-label={t('blog.zoom_out')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M8 11h6M20 20l-3.5-3.5" /></svg>
         </button>
@@ -234,7 +235,7 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
           className="blog-lightbox-btn"
           disabled={failed || scale >= 6}
           onClick={() => setScale((s) => Math.min(6, s + 0.25))}
-          aria-label="Zoom in"
+          aria-label={t('blog.zoom_in')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M11 8v6M8 11h6M20 20l-3.5-3.5" /></svg>
         </button>
@@ -244,7 +245,7 @@ export function BlogLightbox({ images, index, onClose, onNavigate }: {
           target="_blank"
           rel="noreferrer"
           className="blog-lightbox-btn"
-          aria-label="Download"
+          aria-label={t('blog.download')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14" /></svg>
         </a>
