@@ -16,7 +16,8 @@ export const SESSION_RENEW_BEFORE_MS = SESSION_TTL_MS / 2
 export const LIMITS = {
   passwordMaxLength: 128,
   titleMaxLength: 512,
-  contentMaxBytes: 2 * 1024 * 1024,
+  // D1 limits an entire row to 2,000,000 bytes; reserve room for note metadata.
+  contentMaxBytes: 1_900_000,
   folderNameMaxLength: 120,
   tagNameMaxLength: 60,
   folderDepthMax: 12,
@@ -77,6 +78,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
     focusMode: false,
     spellcheck: false,
     showToolbar: true,
+    livePreview: true,
     tabSize: 2,
     autoSaveDelay: 500,
   },
@@ -91,6 +93,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   },
   backup: {
     schedule: 'sixHourly',
+    retentionCount: 0,
   },
   sync: {
     realtime: true,
@@ -103,6 +106,7 @@ export const BACKUP_INTERVALS: Record<string, number> = {
   hourly: 60 * 60 * 1000,
   sixHourly: 6 * 60 * 60 * 1000,
   daily: 24 * 60 * 60 * 1000,
+  weekly: 7 * 24 * 60 * 60 * 1000,
 }
 
 const THEMES = ['light', 'dark', 'system'] as const
@@ -114,7 +118,7 @@ const PROSE_FONTS = ['sans', 'serif'] as const
 const PROSE_WIDTHS = ['narrow', 'normal', 'wide', 'full'] as const
 const EDITOR_FONTS = ['mono', 'sans'] as const
 const EDITOR_LAYOUTS = ['live', 'split', 'preview'] as const
-const BACKUP_SCHEDULES = ['off', 'hourly', 'sixHourly', 'daily'] as const
+const BACKUP_SCHEDULES = ['off', 'hourly', 'sixHourly', 'daily', 'weekly', 'monthly', 'yearly'] as const
 
 
 export function mergeSettings(partial: unknown): UserSettings {
@@ -173,6 +177,7 @@ export function mergeSettings(partial: unknown): UserSettings {
   base.editor.focusMode = booleanValue(editor.focusMode, base.editor.focusMode)
   base.editor.spellcheck = booleanValue(editor.spellcheck, base.editor.spellcheck)
   base.editor.showToolbar = booleanValue(editor.showToolbar, base.editor.showToolbar)
+  base.editor.livePreview = booleanValue(editor.livePreview, base.editor.livePreview)
   base.editor.tabSize = editor.tabSize === 4 ? 4 : editor.tabSize === 2 ? 2 : base.editor.tabSize
   base.editor.autoSaveDelay = integerInRange(
     editor.autoSaveDelay,
@@ -199,6 +204,7 @@ export function mergeSettings(partial: unknown): UserSettings {
     BACKUP_SCHEDULES,
     base.backup.schedule,
   )
+  base.backup.retentionCount = integerInRange(backup.retentionCount, 0, 1000, base.backup.retentionCount)
 
   base.sync.realtime = booleanValue(sync.realtime, base.sync.realtime)
   base.sync.pollIntervalMs = integerInRange(

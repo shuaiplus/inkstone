@@ -48,7 +48,21 @@ describe('extractAttachmentIds', () => {
   it('does not close an md-example fence on a marker followed by text', () => {
     expect(extractAttachmentIds(
       `~~~~md-example\n![a](/api/files/${idA})\n~~~~ trailing\n![b](/api/files/${idB})`,
-    )).toEqual([idB, idA])
+    )).toEqual([idA])
+  })
+
+  it('collects absolute attachment URLs', () => {
+    expect(extractAttachmentIds(`![a](https://inkstone.example.com/api/files/${idA})`)).toEqual([idA])
+  })
+
+  it('does not close ordinary fences on markers followed by text', () => {
+    expect(extractAttachmentIds(
+      `\`\`\`text\nexample\n\`\`\`not-a-close\nmore code\n\`\`\`\n![b](/api/files/${idB})`,
+    )).toEqual([idB])
+  })
+
+  it('ignores md-example markers inside ordinary code fences', () => {
+    expect(extractAttachmentIds(`~~~~text\n\`\`\`md-example\n![a](/api/files/${idA})\n\`\`\`\n~~~~`)).toEqual([])
   })
 })
 

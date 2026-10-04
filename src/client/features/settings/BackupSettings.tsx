@@ -6,7 +6,7 @@ import { api, ApiError } from '../../lib/api';
 import { formatBytes, formatDuration } from '../../lib/time';
 import { useRelativeTime } from '../../lib/hooks';
 import { Badge, Button, IconButton } from '../../components/primitives';
-import { Checkbox, Field, Input, Segmented, SettingRow, Switch } from '../../components/form';
+import { Checkbox, Field, Input, Select, Segmented, SettingRow, Switch } from '../../components/form';
 import { Modal, Tooltip, confirm } from '../../components/overlay';
 import { Empty } from '../../components/feedback';
 import { SettingsLoading as LoadingBlock } from './SettingsLoading';
@@ -63,13 +63,14 @@ export function BackupSettings() {
             const run = await api.backup.run();
             await reload();
             const ok = run.results.filter((r) => r.ok).length;
+            const cleanupWarning = run.results.find((result) => result.warning)?.warning;
             toast({
                 title: run.status === 'success'
                     ? t("settings.backup_completed_value0_targets", { value0: ok }) : run.status === 'partial'
                     ? t("settings.partially_completed_value0_value1", { value0: ok, value1: run.results.length }) : t("settings.backup_failed"),
                 description: run.status === 'success'
-                    ? t("settings.value0_notes_value1", { value0: run.noteCount, value1: formatBytes(run.bytes) }) : translateServiceMessage(run.results.find((r) => !r.ok)?.error) || t("settings.no_enabled_backup_targets"),
-                tone: run.status === 'success' ? 'success' : run.status === 'partial' ? 'warning' : 'danger',
+                    ? cleanupWarning ? `${t("settings.backup_cleanup_warning")} ${translateServiceMessage(cleanupWarning)}` : t("settings.value0_notes_value1", { value0: run.noteCount, value1: formatBytes(run.bytes) }) : translateServiceMessage(run.results.find((r) => !r.ok)?.error) || t("settings.no_enabled_backup_targets"),
+                tone: run.status === 'success' ? cleanupWarning ? 'warning' : 'success' : run.status === 'partial' ? 'warning' : 'danger',
                 duration: 8000,
             });
         }
@@ -142,12 +143,22 @@ export function BackupSettings() {
       <section>
         <h3 className="mb-1 text-[11px] font-semibold tracking-[0.06em] text-[var(--text-quaternary)]">{t("settings.automatic_backups")}</h3>
         <SettingRow title={t("settings.frequency")} description={t("settings.runs_from_cloudflare_cron_the_page_does_not_need_to_stay_open")}>
-          <Segmented<BackupSchedule> label={t("settings.frequency")} value={settings.backup.schedule} onChange={(schedule) => void update({ backup: { schedule } })} options={[
-            { value: 'off', label: t("common.close") },
-            { value: 'hourly', label: t("settings.hourly") },
-            { value: 'sixHourly', label: t("settings.every_6_hours") },
-            { value: 'daily', label: t("settings.daily") },
-        ]}/>
+          <Select aria-label={t("settings.frequency")} className="min-w-36" value={settings.backup.schedule} onChange={(event) => void update({ backup: { schedule: event.target.value as BackupSchedule } })}>
+            <option value="off">{t("common.close")}</option>
+            <option value="hourly">{t("settings.hourly")}</option>
+            <option value="sixHourly">{t("settings.every_6_hours")}</option>
+            <option value="daily">{t("settings.daily")}</option>
+            <option value="weekly">{t("settings.weekly")}</option>
+            <option value="monthly">{t("settings.monthly")}</option>
+            <option value="yearly">{t("settings.yearly")}</option>
+          </Select>
+        </SettingRow>
+        <SettingRow title={t("settings.backup_retention")} description={t("settings.backup_retention_description")}>
+          <Select aria-label={t("settings.backup_retention")} className="min-w-36" value={settings.backup.retentionCount} onChange={(event) => void update({ backup: { retentionCount: Number(event.target.value) } })}>
+            <option value="0">{t("settings.keep_all_backups")}</option>
+            {[7, 14, 30, 90, 365].map((count) => <option key={count} value={count}>{t("settings.keep_latest_backups", { count })}</option>)}
+            {settings.backup.retentionCount > 0 && ![7, 14, 30, 90, 365].includes(settings.backup.retentionCount) && <option value={settings.backup.retentionCount}>{t("settings.keep_latest_backups", { count: settings.backup.retentionCount })}</option>}
+          </Select>
         </SettingRow>
       </section>
 
@@ -563,6 +574,7 @@ function RunRow({ run }: {
               <span className="min-w-0 flex-1 text-[var(--text-quaternary)]">
                 {result.ok
                     ? t("settings.value0_files_value1_value2", { value0: result.files, value1: formatBytes(result.bytes), value2: formatDuration(result.ms) }) : translateServiceMessage(result.error)}
+                {result.warning && <span className="mt-1 block text-[var(--warning)]">{t("settings.backup_cleanup_warning")} {translateServiceMessage(result.warning)}</span>}
               </span>
             </li>))}
         </ul>)}

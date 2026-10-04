@@ -8,6 +8,8 @@ import { createOAuthProvider, providerForScheduled } from './mcp/oauth'
 import { purgeRevokedMcpApiKeys } from './mcp/api-keys'
 import { purgeExpiredMcpOperations } from './mcp/operations'
 import { purgeExpiredOperationalData } from './lib/maintenance'
+import { ApiError } from './lib/errors'
+import { normalizeRepeatedOAuthResource } from './lib/oauth-request'
 
 export { SyncHub } from './realtime/sync-hub'
 export { CredentialVault } from './durable/credential-vault'
@@ -22,7 +24,16 @@ const OAUTH_AUTHORIZATION_SERVER_METADATA = '/.well-known/oauth-authorization-se
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const oauthRequest = await normalizeRepeatedOAuthResource(request)
+    let oauthRequest: Request
+    try {
+      oauthRequest = await normalizeRepeatedOAuthResource(request)
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error
+      return Response.json(
+        { error: 'invalid_request', error_description: error.message },
+        { status: error.status },
+      )
+    }
     const provider = createOAuthProvider(oauthRequest, env)
     if (new URL(oauthRequest.url).pathname === OAUTH_AUTHORIZATION_SERVER_METADATA) {
       return oauthMetadataWithoutIssParameter(provider, oauthRequest, env, ctx)
@@ -46,32 +57,6 @@ export default {
     })())
   },
 } satisfies ExportedHandler<Env>
-
-async function normalizeRepeatedOAuthResource(request: Request): Promise<Request> {
-  const url = new URL(request.url)
-  if (url.pathname === '/authorize') {
-    const resources = url.searchParams.getAll('resource')
-    if (resources.length > 1 && resources.every((resource) => resource === resources[0])) {
-      url.searchParams.delete('resource')
-      url.searchParams.set('resource', resources[0]!)
-      return new Request(url, request)
-    }
-    return request
-  }
-  if (url.pathname !== '/oauth/token' || request.method !== 'POST' ||
-      !request.headers.get('Content-Type')?.toLowerCase().startsWith('application/x-www-form-urlencoded')) {
-    return request
-  }
-  const body = await request.clone().text()
-  const form = new URLSearchParams(body)
-  const resources = form.getAll('resource')
-  if (resources.length < 2 || !resources.every((resource) => resource === resources[0])) return request
-  form.delete('resource')
-  form.set('resource', resources[0]!)
-  const headers = new Headers(request.headers)
-  headers.delete('Content-Length')
-  return new Request(request, { body: form.toString(), headers })
-}
 
 async function oauthMetadataWithoutIssParameter(
   provider: ReturnType<typeof createOAuthProvider>,

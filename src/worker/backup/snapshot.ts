@@ -72,7 +72,7 @@ const encoder = new TextEncoder()
 const NOTE_PAGE_SIZE = 100
 const ATTACHMENT_LOOKUP_BATCH = 200
 const ATTACHMENT_REFERENCE_RE =
-  /\/api\/files\/([0-9a-hjkmnp-tv-z]{26})(?=$|[\s>)\]"'?#])/g
+  /(?:https?:\/\/[^/\s<>"']+)?\/api\/files\/([0-9a-hjkmnp-tv-z]{26})(?=$|[\s>)\]"'?#])/g
 
 export async function buildSnapshot(env: Env, userId: string): Promise<Snapshot> {
   const folderResult = await env.DB.prepare(

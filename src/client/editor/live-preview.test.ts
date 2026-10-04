@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { renderMarkdownBlocks } from '../lib/markdown/renderer';
-import { mergeSettings } from '@shared/constants';
+import { mergeSettings, mergeSettingsPatch } from '@shared/constants';
 
 describe('live preview Markdown compatibility', () => {
+    it('defaults to live rendering and preserves an explicit opt-out across settings updates', () => {
+        expect(mergeSettings({}).editor.livePreview).toBe(true);
+        expect(mergeSettings({ editor: { livePreview: 'false' } }).editor.livePreview).toBe(true);
+        const settings = mergeSettings({ editor: { livePreview: false } });
+        expect(settings.editor.livePreview).toBe(false);
+        expect(mergeSettingsPatch(settings, { editor: { fontSize: 18 }, preview: { layout: 'split' } }).editor.livePreview).toBe(false);
+    });
     it('migrates old layouts while preserving split and unrelated settings', () => {
         for (const layout of ['edit', 'live']) {
             const settings = mergeSettings({ preview: { layout, math: false }, editor: { tabSize: 4 } });

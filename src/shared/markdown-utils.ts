@@ -11,18 +11,18 @@ export function stripCodeRegions(text: string): string {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
-    const m = /^[ \t]{0,3}(`{3,}|~{3,})/.exec(line)
+    const m = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/.exec(line)
     if (m) {
       const marker = m[1]!
       const ch = marker[0]!
-      if (!inFence) {
+      if (!inFence && !(ch === '`' && m[2]!.includes('`'))) {
         inFence = true
         fenceChar = ch
         fenceLen = marker.length
         lines[i] = ''
         continue
       }
-      if (ch === fenceChar && marker.length >= fenceLen) {
+      if (ch === fenceChar && marker.length >= fenceLen && !m[2]!.trim()) {
         inFence = false
         lines[i] = ''
         continue
@@ -443,7 +443,7 @@ export function extractWikiLinks(content: string): WikiLink[] {
 }
 
 const ATTACHMENT_REFERENCE_RE =
-  /(?:^|[\s(<"'=])\/api\/files\/([0-9a-hjkmnp-tv-z]{26})(?=$|[\s>)\]"'?#])/g
+  /(?:^|[\s(<"'=])(?:https?:\/\/[^/\s<>"']+)?\/api\/files\/([0-9a-hjkmnp-tv-z]{26})(?=$|[\s>)\]"'?#])/g
 
 const INLINE_IMAGE_RE = /!\[[^\]]*\]\(\s*([^()\s]+)(?:\s+"[^"]*")?\s*\)/g
 const REF_IMAGE_DEF_RE = /^[ \t]{0,3}\[([^\]]+)\]:[ \t]+(\S+)/gm
@@ -520,18 +520,19 @@ function markdownExampleBodies(text: string): string[] {
     const fence = /^[ \t]{0,3}(`{3,}|~{3,})(.*)$/.exec(line)
     if (fence) {
       const marker = fence[1]!
-      if (collecting === null) {
-        if (/^\s*(?:md-example|markdown-example)\b/.test(fence[2] ?? '')) {
-          fenceChar = marker[0]!
-          fenceLen = marker.length
-          collecting = []
-        }
+      if (!fenceChar && !(marker[0] === '`' && fence[2]!.includes('`'))) {
+        fenceChar = marker[0]!
+        fenceLen = marker.length
+        if (/^\s*(?:md-example|markdown-example)\b/.test(fence[2] ?? '')) collecting = []
+        continue
       } else if (marker[0]! === fenceChar && marker.length >= fenceLen && !(fence[2] ?? '').trim()) {
         // A closing fence may only be followed by spaces or tabs.
-        bodies.push(collecting.join('\n'))
+        if (collecting !== null) bodies.push(collecting.join('\n'))
         collecting = null
+        fenceChar = ''
+        fenceLen = 0
+        continue
       }
-      continue
     }
     if (collecting !== null) collecting.push(line)
   }

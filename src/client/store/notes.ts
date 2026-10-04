@@ -32,6 +32,7 @@ interface NotesState {
     openNote: (id: string, options?: {
         pane?: WorkspacePane;
         activate?: boolean;
+        revealOnMobile?: boolean;
     }) => Promise<void>;
     editTitle: (id: string, title: string) => void;
     editContent: (id: string, content: string) => void;
@@ -184,7 +185,7 @@ export const useNotes = create<NotesState>((set, get) => ({
                     });
                     const initialId = pickInitialNoteId(get().notes, get().folders);
                     if (initialId)
-                        await get().openNote(initialId);
+                        await get().openNote(initialId, { revealOnMobile: false });
                 }
                 let pullError: unknown;
                 try {
@@ -217,7 +218,7 @@ export const useNotes = create<NotesState>((set, get) => ({
                     (activeId && notes[activeId] ? activeId : pickInitialNoteId(notes, state.folders));
                 if (targetId) {
                     if (activeId !== targetId || !hasOwnContent(state.contents, targetId)) {
-                        await get().openNote(targetId, { pane: activePane });
+                        await get().openNote(targetId, { pane: activePane, revealOnMobile: false });
                     }
                     else {
                         revalidateNote(targetId, notes[targetId]!.rev, set, get);
@@ -380,6 +381,10 @@ export const useNotes = create<NotesState>((set, get) => ({
             return { notes, folders, tags, cursor: payload.cursor };
         });
         reconcileFolderUi(get().folders);
+        for (const remote of payload.notes) {
+            if (hasOwnContent(get().contents, remote.id) && !dirty.has(remote.id))
+                revalidateNote(remote.id, remote.rev, set, get);
+        }
         const candidates = payload.full ? [...previousNoteIds, ...deletionIds] : deletionIds;
         for (const id of new Set(candidates)) {
             if (get().notes[id])
@@ -403,7 +408,7 @@ export const useNotes = create<NotesState>((set, get) => ({
         if (!summary)
             return;
         if (hasOwnContent(state.contents, id)) {
-            useUi.getState().setWorkspaceNote(targetPane, id, activate);
+            useUi.getState().setWorkspaceNote(targetPane, id, activate, options?.revealOnMobile);
             revalidateNote(id, summary.rev, set, get);
             return;
         }
@@ -430,7 +435,7 @@ export const useNotes = create<NotesState>((set, get) => ({
                 (noteRequestEpochs.get(id) ?? 0) !== requestEpoch || !get().notes[id])
                 return;
             selected = true;
-            useUi.getState().setWorkspaceNote(targetPane, id, activate);
+            useUi.getState().setWorkspaceNote(targetPane, id, activate, options?.revealOnMobile);
         };
         const feedbackTimer = window.setTimeout(selectTarget, NOTE_SWITCH_FEEDBACK_DELAY_MS);
         try {
@@ -445,6 +450,7 @@ export const useNotes = create<NotesState>((set, get) => ({
                 let foreignPending = false;
                 let visibleContent = cached.content;
                 let visibleTitle: string | undefined;
+                let visibleRev = cached.rev;
                 if (cached.writeId) {
                     const outbox = await localDb.getOutbox();
                     currentSummary = get().notes[id];
@@ -465,6 +471,7 @@ export const useNotes = create<NotesState>((set, get) => ({
 
 
                         visibleContent = existingContent as string;
+                        visibleRev = existingRev as number;
                         visibleTitle = typeof existingTitle === 'string' ? existingTitle : undefined;
                         if (existing.clientId === CLIENT_ID) {
                             inheritedOutboxWrites.delete(id);
@@ -542,8 +549,10 @@ export const useNotes = create<NotesState>((set, get) => ({
                     }
                 }
                 set((s) => ({
-                    notes: visibleTitle !== undefined && s.notes[id]?.title !== visibleTitle
-                        ? { ...s.notes, [id]: { ...s.notes[id]!, title: visibleTitle } }
+                    notes: s.notes[id] && (s.notes[id]!.rev !== visibleRev ||
+                        (visibleTitle !== undefined && s.notes[id]!.title !== visibleTitle))
+                        ? { ...s.notes, [id]: { ...s.notes[id]!, rev: visibleRev,
+                            ...(visibleTitle !== undefined ? { title: visibleTitle } : {}) } }
                         : s.notes,
                     contents: { ...s.contents, [id]: visibleContent },
                     ...(restoredPending
@@ -1308,7 +1317,7 @@ function stageNoteTextWrite(id: string, content: string, title: string | undefin
     const payload = {
         content,
         contentDirty,
-        rev: summary.rev,
+        rev: previousDirty?.rev ?? summary.rev,
         ...(title !== undefined ? { title } : {}),
     };
     const persisted = localDb.enqueueOutbox({
@@ -1321,7 +1330,7 @@ function stageNoteTextWrite(id: string, content: string, title: string | undefin
         attempts: 0,
         createdAt: Date.now(),
     }).then(() => true, () => false);
-    dirty.set(id, { content, contentDirty, ...(title !== undefined ? { title } : {}), rev: summary.rev, writeId, queueId, dependsOnWriteId, updatedAt, persisted });
+    dirty.set(id, { content, contentDirty, ...(title !== undefined ? { title } : {}), rev: payload.rev, writeId, queueId, dependsOnWriteId, updatedAt, persisted });
     const titleChanged = title !== undefined && summary.title !== title;
     set((current) => ({
         notes: titleChanged
@@ -1339,7 +1348,7 @@ function stageNoteTextWrite(id: string, content: string, title: string | undefin
         content,
         contentDirty,
         ...(title !== undefined ? { pendingTitle: title } : {}),
-        rev: summary.rev,
+        rev: payload.rev,
         updatedAt,
         writeId,
     });
@@ -1777,6 +1786,8 @@ function discardNoteRuntimeState(id: string, tombstoneCursor?: number | null): v
 function adoptNote(note: Note | NoteSummary, set: SetNotesState, get: () => NotesState): void {
     if (purgedNoteIds.has(note.id))
         return;
+    if ((get().notes[note.id]?.rev ?? 0) > note.rev)
+        return;
     const hasContent = 'content' in note;
     const incomingSummary = stripContent(note);
     const acceptContent = hasContent && !dirty.has(note.id);
@@ -1858,45 +1869,6 @@ async function settleSavedPatch(id: string, submitted: Pick<DirtyNoteWrite, 'con
     }
     dirty.delete(id);
     adoptNote(saved, set, get);
-}
-async function rebaseQueuedWrite(
-    item: OutboxItem,
-    pending: DirtyNoteWrite | undefined,
-    server: Note,
-    set: SetNotesState,
-    get: () => NotesState,
-): Promise<boolean> {
-    const queueId = pending?.queueId ?? item.id;
-    const writeId = pending?.writeId ?? item.writeId;
-    try {
-        await localDb.updateOutboxRevision(queueId, writeId, server.rev, true);
-    }
-    catch {
-        await localDb.markOutboxFailure(item.id, item.writeId, 'could not rebase the offline journal').catch(() => { });
-        return false;
-    }
-    if (pending && dirty.get(item.noteId)?.writeId === pending.writeId) {
-        const rebased: DirtyNoteWrite = {
-            ...pending,
-            rev: server.rev,
-            dependsOnWriteId: undefined,
-            persisted: Promise.resolve(true),
-        };
-        dirty.set(item.noteId, rebased);
-        void localDb.setContent(item.noteId, {
-            content: rebased.content,
-            contentDirty: rebased.contentDirty,
-            ...(rebased.title !== undefined ? { pendingTitle: rebased.title } : {}),
-            rev: rebased.rev,
-            updatedAt: rebased.updatedAt,
-            writeId: rebased.writeId,
-        });
-    }
-    if (inheritedOutboxWrites.get(item.noteId) === item.writeId)
-        inheritedOutboxWrites.delete(item.noteId);
-    adoptNote(server, set, get);
-    set({ online: true });
-    return true;
 }
 function noteSummaryEqual(a: NoteSummary, b: NoteSummary): boolean {
     return (a.id === b.id &&
@@ -2125,7 +2097,6 @@ async function replayOutboxNow(get: () => NotesState, set: SetNotesState): Promi
         const batch = outbox.filter((item) => !attempted.has(replayAttemptKey(item)));
         if (!batch.length)
             break;
-        let restartRound = false;
         for (const item of batch) {
             attempted.add(replayAttemptKey(item));
             const pendingCreate = pendingNoteCreates.get(item.noteId);
@@ -2238,20 +2209,22 @@ async function replayOutboxNow(get: () => NotesState, set: SetNotesState): Promi
                         }
                         continue;
                     }
-                    if (server) {
-                        restartRound = await rebaseQueuedWrite(item, localPending, server, set, get);
-                        if (restartRound)
-                            break;
-                    }
-                    else
+                    if (!server) {
                         await localDb.markOutboxFailure(item.id, item.writeId, 'conflict response did not include the server note').catch(() => { });
-                    continue;
+                        continue;
+                    }
                 }
-                if (err instanceof ApiError && err.status === 404) {
+                if (err instanceof ApiError && (err.status === 404 || err.isConflict)) {
+                    const server = err.isConflict
+                        ? (err.details as { server: Note }).server
+                        : undefined;
                     const localPending = item.clientId === CLIENT_ID ? dirty.get(item.noteId) : undefined;
-                    const localContent = localPending?.content ?? content;
-                    const localTitle = localPending?.title ?? title ?? get().notes[item.noteId]?.title ?? '';
+                    const localContent = server && !(localPending?.contentDirty ?? contentDirty)
+                        ? server.content : localPending?.content ?? content;
+                    const localTitle = localPending?.title ?? title ?? server?.title ?? get().notes[item.noteId]?.title ?? '';
                     const recoveredWriteId = localPending?.writeId ?? item.writeId;
+                    if (localPending)
+                        await localPending.persisted;
                     let recoveryId = typeof item.payload.recoveryId === 'string'
                         ? item.payload.recoveryId
                         : '';
@@ -2266,18 +2239,25 @@ async function replayOutboxNow(get: () => NotesState, set: SetNotesState): Promi
                             continue;
                         }
                     }
-                    const copyId = await get().createNote({ id: recoveryId, title: localTitle, content: localContent, open: false });
+                    const copyId = await get().createNote({
+                        id: recoveryId,
+                        title: server ? duplicateNoteTitle(localTitle, LIMITS.titleMaxLength) : localTitle,
+                        content: localContent,
+                        folderId: server?.folderId ?? get().notes[item.noteId]?.folderId ?? null,
+                        open: false,
+                    });
                     if (!copyId)
                         continue;
                     const recoveredLatest = !localPending || dirty.get(item.noteId)?.writeId === localPending.writeId;
                     if (localPending && recoveredLatest)
                         dirty.delete(item.noteId);
-                    const recoveryResult = { outcome: 'recovered' as const, recoveryReason: 'deleted' as const, copyId };
+                    const recoveryResult = { outcome: 'recovered' as const,
+                        recoveryReason: server ? 'conflict' as const : 'deleted' as const, copyId };
                     const completed = await settleRecoveredOutbox(item.id, recoveredWriteId, recoveryResult);
                     if (completed)
                         publishOutboxResult(item, recoveryResult);
                     if (item.clientId === CLIENT_ID) {
-                        if (recoveredLatest) {
+                        if (recoveredLatest && !server) {
                             const openPane = workspacePaneForNote(item.noteId);
                             const wasActive = useUi.getState().activeNoteId === item.noteId;
                             const deletionCursor = deletionCursorFrom(err);
@@ -2296,7 +2276,11 @@ async function replayOutboxNow(get: () => NotesState, set: SetNotesState): Promi
                             if (deletionCursor === null)
                                 void get().pull({ force: true }).catch(() => { });
                         }
-                        showOfflineRecoveryToast(copyId, false);
+                        showOfflineRecoveryToast(copyId, Boolean(server));
+                    }
+                    if (server) {
+                        adoptNote(server, set, get);
+                        set({ online: true });
                     }
                     continue;
                 }
@@ -2316,8 +2300,6 @@ async function replayOutboxNow(get: () => NotesState, set: SetNotesState): Promi
                 ).catch(() => {});
             }
         }
-        if (restartRound)
-            continue;
     }
     const remaining = await localDb.getOutbox();
     set({ pendingCount: pendingNoteCount(remaining) });
@@ -2476,6 +2458,10 @@ function reconcileNotes(current: Record<string, NoteSummary>, incoming: NoteSumm
     return next;
 }
 function reconcileRemoteSummary(current: NoteSummary | undefined, incoming: NoteSummary): NoteSummary {
+    // Loaded content keeps its revision until the full note arrives.
+    if (current && incoming.rev > current.rev && !dirty.has(incoming.id) &&
+        hasOwnContent(useNotes.getState().contents, incoming.id))
+        return applyPendingNoteMutations(incoming.id, current);
     const base = current && current.rev > incoming.rev
         ? current
         : mergeDirtySummary(current, incoming);

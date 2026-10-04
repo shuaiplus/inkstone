@@ -232,7 +232,7 @@ authRoutes.post('/login', async (c) => {
   ])
 
   if (await hasEnabledTotp(db, row.id)) {
-    return c.json(await createTotpLoginChallenge(db, row.id))
+    return c.json(await createTotpLoginChallenge(db, row.id, row.password_hash))
   }
 
   const token = await rotateSession(c, row.id)
@@ -343,10 +343,15 @@ authRoutes.post('/password', async (c) => {
   const db = c.env.DB
   const expectedHash = await requireCurrentPassword(db, user.id, body.currentPassword)
   const newHash = await hashPassword(body.newPassword!)
-  const update = await db
-    .prepare(`UPDATE users SET password_hash = ?1 WHERE id = ?2 AND password_hash = ?3`)
-    .bind(newHash, user.id, expectedHash)
-    .run()
+  const [update] = await db.batch([
+    db.prepare(`UPDATE users SET password_hash = ?1 WHERE id = ?2 AND password_hash = ?3`)
+      .bind(newHash, user.id, expectedHash),
+    db.prepare(
+      `DELETE FROM totp_login_challenges
+        WHERE user_id = ?1
+          AND EXISTS (SELECT 1 FROM users WHERE id = ?1 AND password_hash = ?2)`,
+    ).bind(user.id, newHash),
+  ])
 
   if (!update.meta.changes) {
     throw new ApiError(409, 'conflict', 'Account credentials changed elsewhere. Refresh and try again')

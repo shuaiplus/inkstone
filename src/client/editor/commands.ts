@@ -161,6 +161,7 @@ export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
 };
 export const toggleStrikethrough = toggleWrap('~~');
 export const toggleHighlight = toggleWrap('==');
+export const toggleComment = toggleWrap('%%');
 export const toggleInlineMath = toggleWrap('$');
 export const toggleWikiLink = toggleWrap('[[', ']]');
 export const toggleNoteEmbed = toggleWrap('![[', ']]');
@@ -195,7 +196,11 @@ export function setHeading(level: number): StateCommand {
                 const line = state.doc.line(n);
                 const match = /^(#{1,6})\s+/.exec(line.text);
                 const marker = '#'.repeat(level);
-                if (match && match[1]!.length === level) {
+                if (level === 0) {
+                    if (match)
+                        changes.push({ from: line.from, to: line.from + match[0].length });
+                }
+                else if (match && match[1]!.length === level) {
                     changes.push({ from: line.from, to: line.from + match[0].length });
                 }
                 else if (match) {
@@ -324,6 +329,26 @@ export const insertMermaid: StateCommand = (target) => insertWrappedBlock(
     '```',
     'flowchart LR\n  A --> B',
 )(target);
+
+export const insertMathBlock: StateCommand = ({ state, dispatch }) => {
+    const changes = state.changeByRange((range) => {
+        const selected = state.sliceDoc(range.from, range.to);
+        const before = state.sliceDoc(0, range.from);
+        const after = state.sliceDoc(range.to);
+        const prefix = before.length === 0 || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+        const suffix = after.length === 0 || after.startsWith('\n') ? '\n' : '\n\n';
+        const insert = `${prefix}$$\n${selected}\n$$${suffix}`;
+        const contentStart = range.from + prefix.length + 3;
+        return {
+            changes: { from: range.from, to: range.to, insert },
+            range: selected
+                ? EditorSelection.range(contentStart, contentStart + selected.length)
+                : EditorSelection.cursor(contentStart),
+        };
+    });
+    dispatch(state.update(changes, { scrollIntoView: true, userEvent: 'input.insert' }));
+    return true;
+};
 
 export const insertCallout: StateCommand = ({ state, dispatch }) => {
     const range = state.selection.main;

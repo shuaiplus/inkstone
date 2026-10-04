@@ -17,7 +17,7 @@ export function useEscape(active: boolean, onEscape: () => void): void {
         const handler = () => callbackRef.current();
         escStack.push(handler);
         const onKeyDown = (event: KeyboardEvent) => {
-            if (event.key !== 'Escape')
+            if (event.key !== 'Escape' || event.isComposing || event.repeat || event.defaultPrevented)
                 return;
             const top = escStack[escStack.length - 1];
             if (top !== handler)
@@ -337,6 +337,8 @@ export function Menu({ anchor, open, onClose, items, align = 'start', width = 20
         if (!open)
             return;
         const onKeyDown = (event: KeyboardEvent) => {
+            if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)
+                return;
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
                 event.preventDefault();
                 const step = event.key === 'ArrowDown' ? 1 : -1;

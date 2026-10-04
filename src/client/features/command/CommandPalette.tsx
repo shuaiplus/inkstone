@@ -15,6 +15,7 @@ import { createContextualNote, useNotes } from '../../store/notes';
 import { folderPathLabel, openFolderView } from '../../lib/folders';
 import { useSession } from '../../store/session';
 import { t, useLocale } from "../../lib/i18n";
+import { APP_SHORTCUTS } from '../../lib/shortcuts';
 interface Item {
     id: string;
     kind: 'command' | 'note' | 'tag' | 'folder';
@@ -27,11 +28,12 @@ interface Item {
     match?: FuzzyMatch;
     run: () => void;
 }
-export function CommandPalette({ onClose }: {
+export function CommandPalette({ onClose, initialQuery = '' }: {
     onClose: () => void;
+    initialQuery?: string;
 }) {
     const locale = useLocale();
-    const [query, setQuery] = useState('');
+    const [query, setQuery] = useState(initialQuery);
     const [cursor, setCursor] = useState(0);
     const [remote, setRemote] = useState<{
         query: string;
@@ -68,7 +70,7 @@ export function CommandPalette({ onClose }: {
 
     useEffect(() => {
         const text = debounced.trim();
-        if (text.length < 2) {
+        if (text.length < 2 || text.startsWith('>')) {
             setRemote({ query: text, results: [] });
             return;
         }
@@ -93,7 +95,7 @@ export function CommandPalette({ onClose }: {
                 kind: 'command',
                 label: t("common.new_note"),
                 icon: <Plus size={14}/>,
-                combo: 'mod+n',
+                combo: APP_SHORTCUTS.newNote,
                 group: t("command.commands"),
                 run: () => void createContextualNote(),
             },
@@ -112,7 +114,7 @@ export function CommandPalette({ onClose }: {
                         kind: 'command' as const,
                         label: activeNote.isStarred ? t("command.remove_current_note_from_favorites") : t("command.add_current_note_to_favorites"),
                         icon: <Star size={14}/>,
-                        combo: 'mod+d',
+                        combo: APP_SHORTCUTS.star,
                         group: t("common.current_note"),
                         run: () => void patchNote(activeNote.id, { isStarred: !activeNote.isStarred }),
                     },
@@ -137,7 +139,6 @@ export function CommandPalette({ onClose }: {
                         kind: 'command' as const,
                         label: t("command.move_the_current_note_to_trash"),
                         icon: <Trash2 size={14}/>,
-                        combo: 'mod+backspace',
                         group: t("common.current_note"),
                         run: () => void deleteNote(activeNote.id),
                     },
@@ -156,7 +157,6 @@ export function CommandPalette({ onClose }: {
                 kind: 'command',
                 label: t("command.layout_split_view"),
                 icon: <Columns2 size={14}/>,
-                combo: 'mod+\\',
                 group: t("common.interface"),
                 run: () => void updateSettings({ preview: { layout: 'split' } }),
             },
@@ -189,7 +189,6 @@ export function CommandPalette({ onClose }: {
                 kind: 'command',
                 label: t("command.open_graph"),
                 icon: <Waypoints size={14}/>,
-                combo: 'mod+shift+g',
                 group: t("common.interface"),
                 run: () => openPanel('graph'),
             },
@@ -198,7 +197,7 @@ export function CommandPalette({ onClose }: {
                 kind: 'command',
                 label: t("common.open_settings"),
                 icon: <Settings size={14}/>,
-                combo: 'mod+,',
+                combo: APP_SHORTCUTS.settings,
                 group: t("command.commands"),
                 run: () => openPanel('settings'),
             },
@@ -207,7 +206,7 @@ export function CommandPalette({ onClose }: {
                 kind: 'command',
                 label: t("command.keyboard_shortcuts"),
                 icon: <Keyboard size={14}/>,
-                combo: 'shift+?',
+                combo: APP_SHORTCUTS.shortcuts,
                 group: t("command.commands"),
                 run: () => openPanel('shortcuts'),
             },
@@ -256,6 +255,12 @@ export function CommandPalette({ onClose }: {
     ]);
     const items = useMemo<Item[]>(() => {
         const text = query.trim();
+        if (text.startsWith('>')) {
+            const term = text.slice(1).trim();
+            return term
+                ? fuzzyFilter(commands, term, (item) => item.label, 40).map<Item>(({ item, match }) => ({ ...item, score: match.score, match }))
+                : commands.map<Item>((item) => ({ ...item, score: 0 }));
+        }
         const remoteResults = remote.query === text ? remote.results : [];
         const noteList = Object.values(notes).filter((n) => !n.deletedAt);
         if (!text) {
@@ -383,11 +388,13 @@ export function CommandPalette({ onClose }: {
         el?.scrollIntoView({ block: 'nearest' });
     }, [cursor]);
     const onKeyDown = (event: React.KeyboardEvent) => {
-        if (event.key === 'ArrowDown' || (event.key === 'n' && event.ctrlKey)) {
+        if (event.nativeEvent.isComposing) return;
+        const ctrlNavigation = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+        if (event.key === 'ArrowDown' || (event.key === 'n' && ctrlNavigation)) {
             event.preventDefault();
             setCursor((c) => items.length ? Math.min(items.length - 1, c + 1) : 0);
         }
-        else if (event.key === 'ArrowUp' || (event.key === 'p' && event.ctrlKey)) {
+        else if (event.key === 'ArrowUp' || (event.key === 'p' && ctrlNavigation)) {
             event.preventDefault();
             setCursor((c) => Math.max(0, c - 1));
         }

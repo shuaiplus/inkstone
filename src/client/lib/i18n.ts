@@ -110,6 +110,7 @@ export function translateServiceMessage(message: string | null | undefined): str
     match = /^Read and write succeeded, but the test file could not be removed:\s*HTTP\s+(\d{3})$/i.exec(message);
     if (match)
         return t('backup.service.cleanup_failed', { status: match[1] });
+    if (message === 'Old backup cleanup will continue after the next successful backup') return t('backup.service.cleanup_pending');
     const http = /HTTP\s+\d{3}/i.exec(message)?.[0];
     return `${t('backup.error.storage_service')}${http ? ` (${http})` : ''}`;
 }

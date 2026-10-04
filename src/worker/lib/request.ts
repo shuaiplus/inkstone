@@ -12,6 +12,7 @@ export const JSON_BODY_LIMITS = {
 
 export const FORM_BODY_LIMITS = {
   authorization: 16 * 1024,
+  oauthToken: 16 * 1024,
   attachment: LIMITS.attachmentMaxBytes + 512 * 1024,
   import: LIMITS.importUploadMaxBytes + 1024 * 1024,
 } as const
@@ -189,6 +190,6 @@ export function clampInt(
 
 export function assertContentSize(content: string): void {
   if (new TextEncoder().encode(content).byteLength > LIMITS.contentMaxBytes) {
-    throw ApiError.tooLarge('Note content exceeds the 2 MB limit')
+    throw ApiError.tooLarge(`Note content exceeds the ${LIMITS.contentMaxBytes / 1_000_000} MB limit`)
   }
 }

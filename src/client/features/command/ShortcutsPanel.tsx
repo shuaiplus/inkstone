@@ -1,30 +1,10 @@
 import { Kbd } from '../../components/primitives';
 import { Modal } from '../../components/overlay';
-import { hotkeyText, listHotkeys } from '../../lib/hotkeys';
+import { hotkeyText, listHotkeys, prettyCombo } from '../../lib/hotkeys';
+import { NOTE_LIST_SHORTCUTS } from '../../lib/shortcuts';
 import { t } from "../../lib/i18n";
+import { EDITOR_SHORTCUTS } from "../../editor/shortcuts";
 
-const EDITOR_SHORTCUTS: {
-    combo: string;
-    description: () => string;
-}[] = [
-    { combo: 'mod+b', description: () => t("common.bold") },
-    { combo: 'mod+i', description: () => t("common.italic") },
-    { combo: 'mod+e', description: () => t("common.inline_code") },
-    { combo: 'mod+shift+x', description: () => t("common.strikethrough") },
-    { combo: 'mod+shift+h', description: () => t("common.highlight") },
-    { combo: 'mod+1', description: () => t("command.heading_1_same_pattern_for_2_6") },
-    { combo: 'mod+shift+8', description: () => t("common.unordered_list") },
-    { combo: 'mod+shift+7', description: () => t("common.ordered_list") },
-    { combo: 'mod+shift+9', description: () => t("common.task_list") },
-    { combo: 'mod+shift+.', description: () => t("common.quote") },
-    { combo: 'mod+shift+enter', description: () => t("command.check_uncheck_tasks") },
-    { combo: 'alt+arrowup', description: () => t("command.move_line_up") },
-    { combo: 'alt+arrowdown', description: () => t("command.move_line_down") },
-    { combo: 'mod+shift+k', description: () => t("command.delete_line") },
-    { combo: 'mod+f', description: () => t("command.find_and_replace_in_this_note") },
-    { combo: 'mod+z', description: () => t("common.undo") },
-    { combo: 'mod+shift+z', description: () => t("command.redo") },
-];
 const INPUT_HINTS: {
     keys: string[];
     description: () => string;
@@ -52,11 +32,22 @@ export function ShortcutsPanel({ onClose }: {
         }
         map.set(t("common.edit"), [
             ...(map.get(t("common.edit")) ?? []),
-            ...EDITOR_SHORTCUTS.map((item) => ({ ...item, description: item.description() })),
+            ...EDITOR_SHORTCUTS.map((item) => ({ combo: item.combo, description: t(item.label, item.level ? { value0: item.level } : undefined) })),
+        ]);
+        map.set(t('command.note_list'), [
+            { combo: 'arrowup', description: t('command.navigate_notes') },
+            { combo: 'arrowdown', description: t('command.navigate_notes') },
+            { combo: NOTE_LIST_SHORTCUTS.delete, description: t('common.move_to_trash') },
+        ]);
+        map.set(t('command.menu_navigation'), [
+            { combo: 'arrowup', description: t('command.navigate_menu') },
+            { combo: 'arrowdown', description: t('command.navigate_menu') },
+            { combo: 'enter', description: t('command.confirm_choice') },
+            { combo: 'escape', description: t('command.close_overlay') },
         ]);
         return [...map.entries()];
     })();
-    return (<Modal open onClose={onClose} title={t("command.keyboard_shortcuts_021cf9")} description={t("command.use_nearly_every_action_without_touching_the_mouse")} width={720}>
+    return (<Modal open onClose={onClose} title={t("command.keyboard_shortcuts_021cf9")} description={t("command.shortcut_scope_hint", { shortcut: prettyCombo(NOTE_LIST_SHORTCUTS.delete).join(' + ') })} width={720}>
       <div className="grid grid-cols-1 gap-x-8 gap-y-5 pr-1 md:max-h-[62vh] md:grid-cols-2 md:overflow-y-auto">
         {groups.map(([group, items]) => (<section key={group}>
             <h3 className="mb-2 text-[10.5px] font-semibold tracking-[0.07em] text-[var(--text-quaternary)]">

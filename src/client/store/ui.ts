@@ -34,6 +34,8 @@ interface UiState {
   listWidth: number
   navCollapsed: boolean
   listCollapsed: boolean
+  searchList: boolean
+  searchRequest: number
 
   navDrawerOpen: boolean
   splitRatio: number | null
@@ -74,13 +76,15 @@ interface UiState {
 
   setLayout: (patch: Partial<Pick<UiState, 'navWidth' | 'listWidth' | 'splitRatio' | 'workspaceSplitRatio'>>) => void
   setWorkspacePaneLayout: (pane: WorkspacePane, layout: EditorLayout) => void
-  setWorkspaceNote: (pane: WorkspacePane, id: string | null, activate?: boolean) => void
+  setWorkspaceNote: (pane: WorkspacePane, id: string | null, activate?: boolean, revealOnMobile?: boolean) => void
   activateWorkspacePane: (pane: WorkspacePane) => void
   closeSecondaryNote: () => void
   removeWorkspaceNote: (id: string) => void
   toggleNav: () => void
   toggleNavDrawer: (open?: boolean) => void
   toggleList: () => void
+  openSearchList: () => void
+  openExplorer: (folderId?: string | null) => void
   setMobilePane: (pane: UiState['mobilePane']) => void
   openView: (view: ViewKind, options?: { folderId?: string | null; tag?: string | null }) => void
   setSort: (sort: SortKey, order?: SortOrder) => void
@@ -115,7 +119,7 @@ export const DEFAULT_LAYOUT = {
 const DEFAULTS = {
   ...DEFAULT_LAYOUT,
   navCollapsed: false,
-  listCollapsed: false,
+  listCollapsed: true,
   view: 'all' as ViewKind,
   folderId: null,
   tag: null,
@@ -140,7 +144,6 @@ const PERSISTED_KEYS = [
   'navWidth',
   'listWidth',
   'navCollapsed',
-  'listCollapsed',
   'splitRatio',
   'workspaceSplitRatio',
   'workspacePrimaryNoteId',
@@ -178,7 +181,6 @@ function loadPersisted(): Partial<UiState> {
       out.listWidth = clamp(value.listWidth, PANEL_WIDTHS.noteList.min, PANEL_WIDTHS.noteList.max)
     }
     if (typeof value.navCollapsed === 'boolean') out.navCollapsed = value.navCollapsed
-    if (typeof value.listCollapsed === 'boolean') out.listCollapsed = value.listCollapsed
     if (isFiniteNumber(value.splitRatio)) out.splitRatio = clamp(value.splitRatio, 0.2, 0.8)
     if (isFiniteNumber(value.workspaceSplitRatio)) {
       out.workspaceSplitRatio = clamp(value.workspaceSplitRatio, 0.2, 0.8)
@@ -261,7 +263,7 @@ function uniqueStrings(value: unknown[], limit: number): string[] {
     .map((item) => item.slice(0, 128))
 }
 
-function activatedNoteFields(state: UiState, id: string | null, pane: WorkspacePane): Partial<UiState> {
+function activatedNoteFields(state: UiState, id: string | null, pane: WorkspacePane, revealOnMobile = true): Partial<UiState> {
   return {
     activeNoteId: id,
     activeWorkspacePane: pane,
@@ -269,7 +271,7 @@ function activatedNoteFields(state: UiState, id: string | null, pane: WorkspaceP
     recentNoteIds: id
       ? [id, ...state.recentNoteIds.filter((recentId) => recentId !== id)].slice(0, 24)
       : state.recentNoteIds,
-    mobilePane: id ? 'preview' : state.mobilePane,
+    mobilePane: id && revealOnMobile ? 'preview' : state.mobilePane,
   }
 }
 
@@ -308,13 +310,15 @@ export const useUi = create<UiState>((set, get) => ({
   toasts: [],
   lightbox: null,
   mobilePane: 'list',
+  searchList: false,
+  searchRequest: 0,
   ...loadPersisted(),
 
   setLayout: (patch) => set(patch),
   setWorkspacePaneLayout: (pane, layout) => set((state) => ({
     workspacePaneLayouts: { ...state.workspacePaneLayouts, [pane]: layout },
   })),
-  setWorkspaceNote: (pane, id, activate = true) => set((state) => {
+  setWorkspaceNote: (pane, id, activate = true, revealOnMobile = true) => set((state) => {
     if (pane === 'secondary') {
       if (!id) {
         const primaryId = state.workspacePrimaryNoteId ??
@@ -322,7 +326,7 @@ export const useUi = create<UiState>((set, get) => ({
         return {
           workspacePrimaryNoteId: null,
           workspaceSecondaryNoteId: null,
-          ...activatedNoteFields(state, primaryId, 'primary'),
+          ...activatedNoteFields(state, primaryId, 'primary', revealOnMobile),
         }
       }
       const primaryId = state.workspaceSecondaryNoteId
@@ -332,7 +336,7 @@ export const useUi = create<UiState>((set, get) => ({
         workspacePrimaryNoteId: primaryId,
         workspaceSecondaryNoteId: id,
         outlineOpen: false,
-        ...(activate ? activatedNoteFields(state, id, 'secondary') : {}),
+        ...(activate ? activatedNoteFields(state, id, 'secondary', revealOnMobile) : {}),
       }
     }
 
@@ -340,16 +344,16 @@ export const useUi = create<UiState>((set, get) => ({
       return {
         workspacePrimaryNoteId: null,
         workspaceSecondaryNoteId: null,
-        ...activatedNoteFields(state, state.workspaceSecondaryNoteId, 'primary'),
+        ...activatedNoteFields(state, state.workspaceSecondaryNoteId, 'primary', revealOnMobile),
       }
     }
     if (state.workspaceSecondaryNoteId) {
       return {
         workspacePrimaryNoteId: id,
-        ...(activate ? activatedNoteFields(state, id, 'primary') : {}),
+        ...(activate ? activatedNoteFields(state, id, 'primary', revealOnMobile) : {}),
       }
     }
-    return activatedNoteFields(state, id, 'primary')
+    return activatedNoteFields(state, id, 'primary', revealOnMobile)
   }),
   activateWorkspacePane: (pane) => set((state) => {
     const targetId = pane === 'secondary'
@@ -406,6 +410,15 @@ export const useUi = create<UiState>((set, get) => ({
   toggleNav: () => set((s) => ({ navCollapsed: !s.navCollapsed })),
   toggleNavDrawer: (open) => set((s) => ({ navDrawerOpen: open ?? !s.navDrawerOpen })),
   toggleList: () => set((s) => ({ listCollapsed: !s.listCollapsed })),
+  openSearchList: () => set((s) => ({
+    view: 'all', folderId: null, tag: null, selectedIds: [],
+    searchList: true, searchRequest: s.searchRequest + 1, listCollapsed: false,
+    mobilePane: 'list', navDrawerOpen: false, panel: null,
+  })),
+  openExplorer: (folderId = null) => set({
+    view: folderId ? 'folder' : 'all', folderId, tag: null,
+    searchList: false, listCollapsed: true, selectedIds: [], navDrawerOpen: false,
+  }),
   setMobilePane: (mobilePane) => set({ mobilePane }),
 
   openView: (view, options) =>
@@ -415,6 +428,8 @@ export const useUi = create<UiState>((set, get) => ({
       tag: options?.tag ?? null,
       selectedIds: [],
       mobilePane: 'list',
+      listCollapsed: false,
+      searchList: false,
 
       navDrawerOpen: false,
     }),

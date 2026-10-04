@@ -515,7 +515,7 @@
   pointer-events: auto;
   transition-delay: 0s;
 }
-.mobile-library-dropdown section { margin-top: 0; }
+.mobile-library-sheet section { margin-top: 0; }
 .mobile-note-list > header {
   padding: 18px 20px 8px;
   border-bottom: 1px solid var(--border-subtle);
@@ -613,7 +613,8 @@
   width: 1px;
   background: var(--border-default);
 }
-.mobile-library-dropdown button { min-height: 44px; }
+.mobile-library-sheet [role='tree'] button,
+.mobile-library-sheet section button { min-height: 44px; }
 .mobile-settings-content .setting-row {
   flex-direction: row;
   align-items: center;

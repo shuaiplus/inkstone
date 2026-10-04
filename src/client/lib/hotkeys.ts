@@ -10,6 +10,8 @@ export interface Hotkey {
   handler: (event: KeyboardEvent) => void
 
   allowInInput?: boolean
+  allowInOverlay?: boolean
+  enabled?: () => boolean
 
   hidden?: boolean
 }
@@ -48,12 +50,15 @@ function ensureBound(): void {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (event.isComposing || event.repeat) return
+  if (event.defaultPrevented || event.isComposing || event.repeat || event.getModifierState('AltGraph')) return
   const inInput = isEditableTarget(event.target)
+  const inOverlay = Boolean(document.querySelector('[role="dialog"], [role="menu"]'))
 
   for (const hotkey of registry.values()) {
     if (!matches(event, hotkey.combo)) continue
     if (inInput && !hotkey.allowInInput) continue
+    if (inOverlay && !hotkey.allowInOverlay) continue
+    if (hotkey.enabled && !hotkey.enabled()) continue
     event.preventDefault()
     event.stopPropagation()
     hotkey.handler(event)
@@ -66,11 +71,11 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   if (!el || !el.tagName) return false
   const tag = el.tagName.toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
-  if (el.isContentEditable) return true
+  if (el.isContentEditable || el.closest?.('[contenteditable]:not([contenteditable="false"])')) return true
   return Boolean(el.closest?.('.cm-editor'))
 }
 
-function matches(event: KeyboardEvent, combo: string): boolean {
+export function matches(event: KeyboardEvent, combo: string, isMac = IS_MAC): boolean {
   const parts = combo.toLowerCase().split('+')
   const key = parts[parts.length - 1]!
 
@@ -78,14 +83,14 @@ function matches(event: KeyboardEvent, combo: string): boolean {
   const wantShift = parts.includes('shift')
   const wantAlt = parts.includes('alt')
   const wantCtrl = parts.includes('ctrl')
+  const wantMeta = parts.includes('meta') || parts.includes('cmd')
 
-  const expectedCtrl = wantCtrl || (!IS_MAC && wantMod)
-  const expectedMeta = IS_MAC && wantMod
+  const expectedCtrl = wantCtrl || (!isMac && wantMod)
+  const expectedMeta = wantMeta || (isMac && wantMod)
   if (event.ctrlKey !== expectedCtrl || event.metaKey !== expectedMeta) return false
 
 
-  const symbolKey = key.length === 1 && !/[a-z0-9]/.test(key)
-  if (!symbolKey && wantShift !== event.shiftKey) return false
+  if (wantShift !== event.shiftKey) return false
   if (wantAlt !== event.altKey) return false
 
   const pressed = event.key.toLowerCase()
@@ -93,28 +98,47 @@ function matches(event: KeyboardEvent, combo: string): boolean {
 
   if (key.length === 1 && event.code.toLowerCase() === `key${key}`) return true
   if (key.length === 1 && event.code.toLowerCase() === `digit${key}`) return true
+  const punctuation: Record<string, string> = {
+    '/': 'Slash', '\\': 'Backslash', ',': 'Comma', '.': 'Period',
+    '[': 'BracketLeft', ']': 'BracketRight', '-': 'Minus', '=': 'Equal',
+    ';': 'Semicolon', "'": 'Quote', '`': 'Backquote',
+  }
+  if (punctuation[key] === event.code) return true
   if (key === 'esc' && pressed === 'escape') return true
   return false
 }
 
-export function prettyCombo(combo: string): string[] {
+export function prettyCombo(combo: string, isMac = IS_MAC): string[] {
   return combo.split('+').map((part) => {
     switch (part.toLowerCase()) {
       case 'mod':
-        return IS_MAC ? '⌘' : 'Ctrl'
+        return isMac ? '⌘' : 'Ctrl'
       case 'shift':
-        return IS_MAC ? '⇧' : 'Shift'
+        return isMac ? '⇧' : 'Shift'
       case 'alt':
-        return IS_MAC ? '⌥' : 'Alt'
+        return isMac ? '⌥' : 'Alt'
       case 'ctrl':
-        return IS_MAC ? '⌃' : 'Ctrl'
+        return isMac ? '⌃' : 'Ctrl'
+      case 'meta':
+      case 'cmd':
+        return isMac ? '⌘' : 'Win'
       case 'escape':
       case 'esc':
         return 'Esc'
       case 'enter':
         return '↵'
+      case 'tab':
+        return 'Tab'
+      case 'delete':
+        return 'Delete'
+      case 'home':
+        return 'Home'
+      case 'end':
+        return 'End'
+      case 'space':
+        return 'Space'
       case 'backspace':
-        return IS_MAC ? '⌫' : 'Backspace'
+        return isMac ? '⌫' : 'Backspace'
       case 'arrowup':
         return '↑'
       case 'arrowdown':

@@ -451,3 +451,17 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.byteLength !== b.byteLength) return false
   return a.every((value, index) => value === b[index])
 }
+
+export async function s3DeleteArchive(
+  config: S3Config,
+  secret: S3Secret,
+  archivePath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const key = joinKey(normalizeBackupPrefix(config.prefix ?? ''), archivePath)
+  const response = await client(secret, config).fetch(objectUrl(config, key), {
+    method: 'DELETE', signal, redirect: 'manual',
+  })
+  if (!response.ok && response.status !== 404) throw new Error(await describeError(response, key))
+  await response.body?.cancel().catch(() => {})
+}

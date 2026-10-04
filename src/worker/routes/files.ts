@@ -9,6 +9,7 @@ import {
   readAttachmentObjectStream,
 } from '../attachments/backend'
 import { drainAttachmentCleanup } from '../attachments/cleanup'
+import { collectAttachmentReferences } from '../attachments/references'
 import {
   attachmentCleanupTarget,
   attachmentObjectKey,
@@ -71,34 +72,6 @@ function toAttachment(row: AttachmentRow): Attachment {
     url: `/api/files/${row.id}`,
     createdAt: row.created_at,
   }
-}
-
-async function collectAttachmentReferences(
-  db: D1Database,
-  userId: string,
-  wantedIds?: ReadonlySet<string>,
-): Promise<Map<string, number>> {
-  const references = new Map<string, number>()
-  if (wantedIds?.size === 0) return references
-
-  let afterId = ''
-  while (true) {
-    const { results } = await db.prepare(
-      `SELECT id, content FROM notes
-        WHERE user_id = ?1 AND id > ?2 ORDER BY id ASC LIMIT ?3`,
-    ).bind(userId, afterId, ATTACHMENT_SCAN_PAGE_SIZE).all<{ id: string; content: string }>()
-    if (!results.length) break
-
-    for (const note of results) {
-      for (const id of extractAttachmentIds(note.content)) {
-        if (wantedIds && !wantedIds.has(id)) continue
-        references.set(id, (references.get(id) ?? 0) + 1)
-      }
-    }
-    afterId = results[results.length - 1]!.id
-    if (results.length < ATTACHMENT_SCAN_PAGE_SIZE) break
-  }
-  return references
 }
 
 async function collectAttachmentIdsThroughBoundary(

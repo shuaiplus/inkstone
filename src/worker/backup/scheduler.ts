@@ -1,4 +1,5 @@
-import { BACKUP_INTERVALS, LIMITS, mergeSettings } from '@shared/constants'
+import { LIMITS, mergeSettings } from '@shared/constants'
+import { backupIntervalMs } from '@shared/backup-schedule'
 import type { Env } from '../env'
 import { initializeDatabase } from '../db/schema'
 import { getMeta, setMeta } from '../db/metadata'
@@ -53,7 +54,7 @@ export async function runScheduledBackups(env: Env): Promise<void> {
     await forEachConcurrent(users, 2, async (user) => {
       try {
         const settings = mergeSettings(parse(user.settings))
-        const interval = BACKUP_INTERVALS[settings.backup.schedule] ?? 0
+        const interval = backupIntervalMs(settings.backup.schedule, user.last_success_at ?? now)
         if (!interval) return
 
 

@@ -68,15 +68,20 @@ export async function hasEnabledTotp(db: D1Database, userId: string): Promise<bo
 export async function createTotpLoginChallenge(
   db: D1Database,
   userId: string,
+  expectedPasswordHash: string,
   now = Date.now(),
 ): Promise<TotpLoginChallenge> {
   const challengeToken = generateOpaqueToken()
   const challengeHash = await hashOpaqueToken(challengeToken)
   const expiresAt = now + TOTP_LOGIN_TTL_MS
-  await db.prepare(
+  const result = await db.prepare(
     `INSERT INTO totp_login_challenges (id, user_id, expires_at, created_at)
-     VALUES (?1, ?2, ?3, ?4)`,
-  ).bind(challengeHash, userId, expiresAt, now).run()
+     SELECT ?1, ?2, ?3, ?4
+      WHERE EXISTS (SELECT 1 FROM users WHERE id = ?2 AND password_hash = ?5)`,
+  ).bind(challengeHash, userId, expiresAt, now, expectedPasswordHash).run()
+  if (!result.meta.changes) {
+    throw ApiError.unauthenticated('Account credentials changed. Sign in again')
+  }
   return { twoFactorRequired: true, challengeToken, expiresAt }
 }
 

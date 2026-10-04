@@ -2,6 +2,16 @@
 import type { DatabaseState, Env } from '../env'
 import { getMeta, setMeta } from './metadata'
 
+const BACKUP_ARCHIVES_TABLE = `CREATE TABLE IF NOT EXISTS backup_archives (
+  user_id TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  archive_path TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, target_id, destination, archive_path)
+)`
+const BACKUP_ARCHIVES_INDEX = `CREATE INDEX IF NOT EXISTS idx_backup_archives_retention
+  ON backup_archives(user_id, target_id, destination, created_at DESC, archive_path DESC)`
 
 export const SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS app_meta (
@@ -166,6 +176,8 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
     updated_at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_targets_user ON backup_targets(user_id, created_at)`,
+  BACKUP_ARCHIVES_TABLE,
+  BACKUP_ARCHIVES_INDEX,
 
   `CREATE TABLE IF NOT EXISTS backup_runs (
     id TEXT PRIMARY KEY,
@@ -521,6 +533,10 @@ const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       `CREATE INDEX IF NOT EXISTS idx_versions_user ON note_versions(user_id)`,
     ],
   },
+  {
+    version: 13,
+    statements: [BACKUP_ARCHIVES_TABLE, BACKUP_ARCHIVES_INDEX],
+  },
 ]
 
 const FTS_STATEMENT = `CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -554,6 +570,7 @@ const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   attachment_cleanup: ['object_key', 'user_id', 'created_at'],
   import_mappings: ['user_id', 'entity', 'source_id', 'target_id', 'updated_at'],
   backup_targets: ['id', 'user_id', 'type', 'name', 'enabled', 'config', 'secret', 'last_run_at', 'last_status', 'last_error', 'created_at', 'updated_at'],
+  backup_archives: ['user_id', 'target_id', 'destination', 'archive_path', 'created_at'],
   backup_runs: ['id', 'user_id', 'trigger', 'status', 'started_at', 'finished_at', 'note_count', 'file_count', 'bytes', 'detail'],
   shares: ['slug', 'note_id', 'user_id', 'password_hash', 'expires_at', 'views', 'created_at'],
   share_asset_sessions: ['id', 'slug', 'password_hash', 'expires_at', 'created_at'],
@@ -585,6 +602,7 @@ const REQUIRED_TABLES = [
   'attachment_cleanup',
   'import_mappings',
   'backup_targets',
+  'backup_archives',
   'backup_runs',
   'shares',
   'share_asset_sessions',
@@ -625,6 +643,7 @@ const REQUIRED_INDEXES = [
   'idx_attachment_cleanup_user',
   'idx_import_mappings_target',
   'idx_targets_user',
+  'idx_backup_archives_retention',
   'idx_runs_user',
   'idx_shares_note',
   'idx_shares_user_created',

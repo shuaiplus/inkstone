@@ -1,5 +1,9 @@
 import type { MessageKey } from './en-US';
 export const ZH_CN_MESSAGES = {
+    "navigation.note_views": "笔记视图",
+    "navigation.close_list": "收起笔记列表",
+    "navigation.searching": "正在搜索…",
+    "navigation.local_search_only": "搜索暂不可用，当前显示本地匹配结果。",
     "mobile.account": "我的",
     "mobile.view": "查看",
     "mobile.menu": "菜单",
@@ -172,6 +176,16 @@ export const ZH_CN_MESSAGES = {
     "command.insert_tag_autocomplete": "插入标签（自动补全）",
     "command.jump_to_the_next_cell_in_the_table": "在表格中跳到下一格",
     "command.keyboard_shortcuts": "快捷键一览",
+    "command.indent": "增加缩进",
+    "command.outdent": "减少缩进",
+    "command.select_next_occurrence": "选中下一处相同文本",
+    "command.shortcut_scope_hint": "格式和文本编辑快捷键在笔记编辑器内生效。{shortcut} 仅在笔记列表获得焦点时将笔记移入回收站。",
+    "command.note_list": "笔记列表",
+    "command.navigate_notes": "上下选择笔记",
+    "command.navigate_menu": "切换菜单或搜索结果",
+    "command.confirm_choice": "确认选择",
+    "command.close_overlay": "关闭菜单或弹窗",
+    "command.menu_navigation": "菜单与弹窗",
     "command.keyboard_shortcuts_021cf9": "键盘快捷键",
     "command.layout_editor_only": "布局：仅编辑",
     "command.layout_preview_only": "布局：仅预览",
@@ -655,6 +669,15 @@ export const ZH_CN_MESSAGES = {
     "settings.created_value0_updated_value1_skipped_value2_restored_value3_attachments": "新建 {value0} 篇，更新 {value1} 篇，跳过 {value2} 篇，恢复 {value3} 个附件，跳过 {value4} 个附件",
     "settings.current_password": "当前密码",
     "settings.daily": "每天",
+    "settings.weekly": "每周",
+    "settings.monthly": "每月",
+    "settings.yearly": "每年",
+    "settings.backup_retention": "保留份数",
+    "settings.backup_retention_description": "每个目标单独保留。新备份成功后才清理超出的旧备份；仅清理启用本功能后由本应用记录的备份，手动备份也计入。",
+    "settings.keep_all_backups": "保留全部",
+    "settings.keep_latest_backups": "保留最近 {count} 份",
+    "settings.backup_cleanup_warning": "备份已成功，旧备份清理未完成：",
+    "backup.service.cleanup_pending": "旧备份较多，将在下次成功备份后继续清理。",
     "settings.dark": "深色",
     "settings.data": "数据",
     "settings.delay_before_uploading_after_you_stop_typing_shorter_makes_more_requests": "停止输入后等待多久自动保存",
@@ -1113,11 +1136,22 @@ export const ZH_CN_MESSAGES = {
     "time.yesterday": "昨天",
       "workspace.reading_mode": "阅读模式",
   "workspace.live_preview": "即时渲染",
+  "workspace.editing_mode": "编辑模式",
   "workspace.live_preview_hint": "点击内容编辑，移开光标查看排版；Ctrl / ⌘ + 点击打开链接",
   "workspace.a_snapshot_is_saved_every_few_minutes_or_after_larger_edits": "每隔几分钟或改动较大时，会自动留一份存档",
     "workspace.autosave_for_value0": "「{value0}」的自动存档",
     "workspace.back_to_notes": "返回笔记列表",
     "workspace.block_id": "块 ID",
+    "workspace.paragraph": "正文",
+    "workspace.upload_image": "上传图片",
+    "workspace.block_math": "块级公式",
+    "workspace.front_matter": "笔记属性（YAML）",
+    "workspace.hidden_comment": "隐藏注释",
+    "workspace.links_and_references": "链接与引用",
+    "workspace.note_tools": "笔记工具",
+    "workspace.code_and_diagrams": "代码与图表",
+    "workspace.content_blocks": "内容块",
+    "workspace.formatting_tools": "排版工具栏",
     "workspace.block_reference": "块引用",
     "workspace.callout": "提示块",
     "workspace.characters": "字符",
@@ -1198,7 +1232,7 @@ aliases:
 - [ ] 点击这个复选框，确认勾选状态会保存
   - [ ] 子任务也能精确勾选，不会改错上一行
 - [ ] 选中文字，按 \`Ctrl + B\` 加粗
-- [ ] 按 \`Ctrl + K\` 打开命令面板
+- [ ] 按 \`Ctrl + Shift + P\` 打开命令面板
 - [ ] 写一个 \`#标签\`，或点击 [[我的第一篇笔记]] 创建双链笔记
 - [ ] 点击笔记顶部标题，把它改成与正文不同的名称
 - [ ] 新建一个子文件夹，再把它拖到其他文件夹或同级位置
@@ -1218,16 +1252,17 @@ aliases:
 
 | 快捷键 | 作用 |
 | --- | --- |
-| \`Ctrl + K\` | 打开命令面板 |
-| \`Ctrl + P\` | 快速打开笔记 |
-| \`Ctrl + N\` | 新建笔记 |
+| \`Ctrl + Shift + P\` | 打开命令面板 |
+| \`Ctrl + Alt + N\` | 新建笔记 |
 | \`Ctrl + Shift + F\` | 全文搜索 |
 | \`Ctrl + ,\` | 打开设置 |
 | \`Ctrl + \\\` | 切换编辑、分栏和预览 |
 | \`Ctrl + S\` | 立即保存；平时会自动保存 |
 | \`Ctrl + B / I / E\` | 粗体、斜体、行内代码 |
-| \`Ctrl + 1…6\` | 设置一至六级标题 |
-| \`Shift + ?\` | 查看完整快捷键 |
+| \`Ctrl + Alt + 1…6\` | 设置一至六级标题 |
+| \`Ctrl + Alt + 0\` | 恢复正文 |
+| \`Ctrl + K\` | 在编辑器内插入链接 |
+| \`Ctrl + Shift + /\` | 查看完整快捷键 |
 
 ## 为什么适合长期使用
 

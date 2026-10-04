@@ -273,6 +273,23 @@ export async function webdavTest(
   }
 }
 
+export async function webdavDeleteArchive(
+  config: WebdavConfig,
+  secret: WebdavSecret,
+  archivePath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const base = baseUrl(config)
+  const path = [normalizeBackupPrefix(config.prefix ?? ''), archivePath].filter(Boolean).join('/')
+  const response = await webdavFetch(childUrl(base, path), {
+    method: 'DELETE',
+    headers: { Authorization: authHeader(config, secret), 'User-Agent': BACKUP_USER_AGENT },
+    signal,
+  }, base.origin)
+  await response.body?.cancel().catch(() => {})
+  if (!response.ok && response.status !== 404) throw new Error(`Deleting an old backup failed: HTTP ${response.status}`)
+}
+
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.byteLength !== b.byteLength) return false
   return a.every((value, index) => value === b[index])

@@ -1,4 +1,4 @@
-import { LIMITS } from '@shared/constants'
+import { LIMITS, mergeSettings } from '@shared/constants'
 import { truncateText } from '@shared/text-utils'
 import type {
   BackupRun,
@@ -15,8 +15,9 @@ import { acquireLease } from '../lib/lease'
 import { buildSnapshot, type Snapshot } from './snapshot'
 import { friendlyError, isTransientBackupError } from './common'
 import { forEachConcurrent } from './concurrency'
-import { s3Deliver, s3Test, type S3Secret } from './s3'
-import { webdavDeliver, webdavTest, type WebdavSecret } from './webdav'
+import { s3Deliver, s3DeleteArchive, s3Test, type S3Secret } from './s3'
+import { webdavDeliver, webdavDeleteArchive, webdavTest, type WebdavSecret } from './webdav'
+import { retainSuccessfulBackup } from './retention'
 
 export interface TargetRow {
   id: string
@@ -150,9 +151,11 @@ async function runBackupUnlocked(
     return failed
   }
 
+  const user = await env.DB.prepare(`SELECT settings FROM users WHERE id = ?1`).bind(userId).first<{ settings: string }>()
+  const retentionCount = mergeSettings(user ? safeParse(user.settings) : {}).backup.retentionCount
   const results = new Array<BackupTargetResult>(targets.length)
   await forEachConcurrent(targets, 2, async (target, index) => {
-    results[index] = await deliverToTarget(env, target, snapshot)
+    results[index] = await deliverToTarget(env, target, snapshot, retentionCount)
   })
 
   const okCount = results.filter((r) => r.ok).length
@@ -176,6 +179,7 @@ async function deliverToTarget(
   env: Env,
   target: TargetRow,
   snapshot: Snapshot,
+  retentionCount: number,
 ): Promise<BackupTargetResult> {
   const started = Date.now()
   const base: Omit<BackupTargetResult, 'ok' | 'files' | 'bytes' | 'ms' | 'error'> = {
@@ -201,7 +205,19 @@ async function deliverToTarget(
           target.type === 's3'
             ? await s3Deliver(config, secret, snapshot, controller.signal)
             : await webdavDeliver(config, secret, snapshot, controller.signal)
-        return { ...base, ok: true, files: outcome.files, bytes: outcome.bytes, ms: Date.now() - started, error: null }
+        let warning: string | undefined
+        try {
+          const cleanupSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
+          await retainSuccessfulBackup(env.DB, target, snapshot, retentionCount, (path) => {
+            const signal = AbortSignal.any([cleanupSignal, AbortSignal.timeout(10_000)])
+            return target.type === 's3'
+              ? s3DeleteArchive(config, secret, path, signal)
+              : webdavDeleteArchive(config, secret, path, signal)
+          })
+        } catch (error) {
+          warning = truncateText(friendlyError(error), 1000)
+        }
+        return { ...base, ok: true, files: outcome.files, bytes: outcome.bytes, ms: Date.now() - started, error: null, ...(warning ? { warning } : {}) }
       } catch (error) {
         if (attempt > 0 || !isTransientBackupError(error)) throw error
       } finally {

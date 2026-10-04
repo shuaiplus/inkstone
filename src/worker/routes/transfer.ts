@@ -65,6 +65,8 @@ const EXPORT_FORMAT = 'inkstone-export'
 type ImportConflict = 'skip' | 'newer' | 'duplicate'
 const IMPORT_CONFLICTS = new Set<ImportConflict>(['skip', 'newer', 'duplicate'])
 const MAX_IMPORT_WARNINGS = 100
+const EXPORT_LEASE_TTL_MS = 15 * 60_000
+const EXPORT_LEASE_RENEW_MS = 5 * 60_000
 
 transferRoutes.use('/export', requireAuth)
 transferRoutes.use('/import', requireAuth)
@@ -89,9 +91,23 @@ transferRoutes.get('/export', async (c) => {
   const release = await acquireLease(
     c.env.DB,
     `snapshot_lock:${userId}`,
-    15 * 60 * 1000,
+    EXPORT_LEASE_TTL_MS,
     'A backup or export is already running. Try again later',
   )
+  const abort = new AbortController()
+  const heartbeat = setInterval(() => {
+    void release.renew().then((ok) => {
+      if (!ok) abort.abort(new Error('The export lease was lost'))
+    }).catch((error) => {
+      console.warn('[inkstone] Export lease renewal failed:', error)
+      abort.abort(error)
+    })
+  }, EXPORT_LEASE_RENEW_MS)
+  let streaming = false
+  const finish = async () => {
+    clearInterval(heartbeat)
+    await release()
+  }
   try {
     const format = c.req.query('format') === 'json' ? 'json' : 'zip'
 
@@ -110,18 +126,21 @@ transferRoutes.get('/export', async (c) => {
     const snapshot = await buildSnapshot(c.env, userId)
     const archive = createBackupArchive(snapshot)
     const fixed = new FixedLengthStream(archive.byteLength)
-    void archive.stream.pipeTo(fixed.writable).catch((error) => {
+    const completed = archive.stream.pipeTo(fixed.writable, { signal: abort.signal }).catch((error) => {
       console.error('[inkstone] Streaming ZIP export failed:', error)
-    })
-    return new Response(fixed.readable as BodyInit, {
+    }).finally(finish)
+    const response = new Response(fixed.readable as BodyInit, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="${archive.filename}"`,
         'Cache-Control': 'private, no-store',
       },
     })
+    c.executionCtx.waitUntil(completed)
+    streaming = true
+    return response
   } finally {
-    await release()
+    if (!streaming) await finish()
   }
 })
 

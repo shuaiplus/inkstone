@@ -119,10 +119,13 @@ backupRoutes.patch('/targets/:id', async (c) => {
 })
 
 backupRoutes.delete('/targets/:id', async (c) => {
-  const res = await c.env.DB.prepare(`DELETE FROM backup_targets WHERE id = ?1 AND user_id = ?2`)
-    .bind(c.req.param('id'), c.get('userId'))
-    .run()
-  if (!res.meta.changes) throw ApiError.notFound('Backup target not found')
+  const id = c.req.param('id')
+  const userId = c.get('userId')
+  const [res] = await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM backup_targets WHERE id = ?1 AND user_id = ?2`).bind(id, userId),
+    c.env.DB.prepare(`DELETE FROM backup_archives WHERE target_id = ?1 AND user_id = ?2`).bind(id, userId),
+  ])
+  if (!res?.meta.changes) throw ApiError.notFound('Backup target not found')
   return c.json({ ok: true })
 })
 

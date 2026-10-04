@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef } from 'react';
 import { Eye, FileText, PanelLeft, PencilLine, UserRound } from 'lucide-react';
 import { cn } from '../../lib/cn';
 import { registerAll } from '../../lib/hotkeys';
+import { APP_SHORTCUTS } from '../../lib/shortcuts';
 import { useBreakpoint } from '../../lib/hooks';
 import { useSyncEngine } from '../../lib/sync';
 import { Drawer } from '../../components/overlay';
@@ -47,7 +48,7 @@ export function AppShell() {
         const match = /^\/n\/([0-9a-hjkmnp-tv-z]{26})\/?$/.exec(location.pathname);
         if (!match)
             return;
-        useUi.getState().openView('all');
+        useUi.getState().openExplorer();
         void openNote(match[1]!);
     }, [hydrated, loading, openNote]);
     useEffect(() => {
@@ -188,7 +189,7 @@ function OverlayHost() {
     return (<>
       {panel === 'settings' && <SettingsPanel key={userId} onClose={closePanel}/>}
       <Suspense fallback={null}>
-        {panel === 'command' && <CommandPalette onClose={closePanel}/>}
+        {(panel === 'command' || panel === 'search') && <CommandPalette key={panel} initialQuery={panel === 'command' ? '> ' : ''} onClose={closePanel}/>}
         {panel === 'shortcuts' && <ShortcutsPanel onClose={closePanel}/>}
         {panel === 'graph' && <GraphPanel onClose={closePanel}/>}
         {panel === 'share' && <SharePanel onClose={closePanel}/>}
@@ -207,26 +208,23 @@ function useGlobalHotkeys(): void {
 
         const ui = () => useUi.getState();
         const notes = () => useNotes.getState();
+        const hasNote = () => {
+            const id = ui().activeNoteId;
+            return Boolean(id && notes().notes[id] && !notes().notes[id].deletedAt);
+        };
         return registerAll([
             {
                 id: 'command',
-                combo: 'mod+k',
+                combo: APP_SHORTCUTS.command,
                 description: () => t("common.command_palette"),
                 group: () => t("shell.global"),
                 allowInInput: true,
+                allowInOverlay: true,
                 handler: () => ui().togglePanel('command'),
             },
             {
-                id: 'quick-open',
-                combo: 'mod+p',
-                description: () => t("shell.quick_open"),
-                group: () => t("shell.global"),
-                allowInInput: true,
-                handler: () => ui().openPanel('command'),
-            },
-            {
                 id: 'new-note',
-                combo: 'mod+n',
+                combo: APP_SHORTCUTS.newNote,
                 description: () => t("common.new_note"),
                 group: () => t("shell.global"),
                 allowInInput: true,
@@ -234,15 +232,16 @@ function useGlobalHotkeys(): void {
             },
             {
                 id: 'search',
-                combo: 'mod+shift+f',
+                combo: APP_SHORTCUTS.search,
                 description: () => t("shell.search_all_notes"),
                 group: () => t("shell.global"),
                 allowInInput: true,
-                handler: () => ui().openPanel('command'),
+                allowInOverlay: true,
+                handler: () => ui().openSearchList(),
             },
             {
                 id: 'settings',
-                combo: 'mod+,',
+                combo: APP_SHORTCUTS.settings,
                 description: () => t("common.open_settings"),
                 group: () => t("shell.global"),
                 allowInInput: true,
@@ -250,7 +249,7 @@ function useGlobalHotkeys(): void {
             },
             {
                 id: 'toggle-list',
-                combo: 'mod+shift+b',
+                combo: APP_SHORTCUTS.toggleList,
                 description: () => t("shell.collapse_expand_list"),
                 group: () => t("common.interface"),
                 allowInInput: true,
@@ -258,10 +257,11 @@ function useGlobalHotkeys(): void {
             },
             {
                 id: 'cycle-layout',
-                combo: 'mod+\\',
+                combo: APP_SHORTCUTS.cycleLayout,
                 description: () => t("shell.cycle_editor_split_preview"),
                 group: () => t("common.interface"),
                 allowInInput: true,
+                enabled: hasNote,
                 handler: () => {
                     const order = ['live', 'split', 'preview'] as const;
                     const uiState = ui();
@@ -280,24 +280,29 @@ function useGlobalHotkeys(): void {
             },
             {
                 id: 'shortcuts',
-                combo: 'shift+?',
+                combo: APP_SHORTCUTS.shortcuts,
                 description: () => t("shell.keyboard_shortcuts"),
                 group: () => t("shell.global"),
+                allowInInput: true,
+                allowInOverlay: true,
                 handler: () => ui().togglePanel('shortcuts'),
             },
             {
                 id: 'save',
-                combo: 'mod+s',
+                combo: APP_SHORTCUTS.save,
                 description: () => t("shell.save_now"),
                 group: () => t("common.edit"),
                 allowInInput: true,
+                allowInOverlay: true,
                 handler: () => void notes().flush({ immediate: true }),
             },
             {
                 id: 'star',
-                combo: 'mod+d',
+                combo: APP_SHORTCUTS.star,
                 description: () => t("shell.add_to_remove_from_favorites"),
                 group: () => t("common.note"),
+                allowInInput: true,
+                enabled: hasNote,
                 handler: () => {
                     const id = ui().activeNoteId;
                     const note = id ? notes().notes[id] : null;
@@ -306,30 +311,13 @@ function useGlobalHotkeys(): void {
                 },
             },
             {
-                id: 'delete',
-                combo: 'mod+backspace',
-                description: () => t("common.move_to_trash"),
-                group: () => t("common.note"),
-                handler: () => {
-                    const id = ui().activeNoteId;
-                    if (id)
-                        void notes().deleteNote(id);
-                },
-            },
-            {
                 id: 'outline',
-                combo: 'mod+shift+o',
+                combo: APP_SHORTCUTS.outline,
                 description: () => t("shell.show_hide_outline"),
                 group: () => t("common.interface"),
                 allowInInput: true,
+                enabled: hasNote,
                 handler: () => ui().toggleOutline(),
-            },
-            {
-                id: 'graph',
-                combo: 'mod+shift+g',
-                description: () => t("common.graph"),
-                group: () => t("shell.global"),
-                handler: () => ui().togglePanel('graph'),
             },
         ]);
     }, []);
