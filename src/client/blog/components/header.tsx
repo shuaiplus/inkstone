@@ -81,7 +81,7 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
   const [visibleIcons, setVisibleIcons] = useState(5)
   const innerRef = useRef<HTMLDivElement>(null)
   const compactRef = useRef(false)
-  const lastWidthRef = useRef(0)
+  const navFullWRef = useRef(0)
   const base = `/blog/${encodeURIComponent(username)}`
   const navItems = [
     { label: t('blog.articles'), path: '', icon: ARTICLES_ICON },
@@ -103,16 +103,18 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
     return () => document.removeEventListener('keydown', onKey)
   }, [menuOpen])
 
-  // Collapse the text nav into the menu button when measured content
-  // overflows the header (long titles, translations, narrow windows).
+  // Space-saving order when the header overflows (measured, not viewport):
+  // L0 text nav → L1 nav as icons → L2 hide Articles → L3 hide Moments →
+  // L4 hide Password → L5 hide theme (menu only). Title ellipsis is last,
+  // handled by CSS flex once even L5 + full title doesn't fit.
   // Viewport breakpoints can't see actual text widths, so measure instead.
-  // Icon buttons are measured the same way: read one button's width and the
-  // actions gap from the DOM (so CSS tweaks never desync the math), then
-  // compute how many fit after the (variable-width) brand.
-  // Priority to keep: menu > theme > lock > moments > articles.
   useEffect(() => {
     const inner = innerRef.current
     if (!inner) return
+    const BTN =
+      parseFloat(window.getComputedStyle(inner).getPropertyValue('--blog-header-btn-w')) || 30
+    const GAP = 1
+    const HGAP = 8
     const evaluate = () => {
       // clientWidth includes padding; children must fit the content box.
       const style = window.getComputedStyle(inner)
@@ -120,47 +122,56 @@ export function BlogHeader({ username, title, path, theme, onToggleTheme }: {
       const brand = inner.querySelector<HTMLElement>('.blog-brand')
       const actions = inner.querySelector<HTMLElement>('.blog-header-actions')
       if (!brand || !actions) return
+      // Read real button/gap sizes so CSS tweaks never desync the math.
+      const menuBtn = actions.querySelector<HTMLElement>('.blog-menu-toggle')
+      const btnW = menuBtn?.offsetWidth || BTN
+      const gap = parseFloat(window.getComputedStyle(actions).columnGap) || GAP
+      const slot = btnW + gap
+      const brandFull = brand.scrollWidth
       if (window.innerWidth < 768) {
-        // Mobile: text nav is hidden by CSS; fit icons into measured space.
+        // Mobile: text nav is hidden by CSS; start from icon nav (L1).
         if (compactRef.current) {
           compactRef.current = false
           setCompact(false)
         }
-        const menuBtn = actions.querySelector<HTMLElement>('.blog-menu-toggle')
-        const btnW = menuBtn?.offsetWidth || 40
-        const gap = parseFloat(window.getComputedStyle(actions).columnGap) || 0
-        const slot = btnW + gap
-        const space = avail - brand.offsetWidth - 8
+        const space = avail - brand.offsetWidth - HGAP
         const n = Math.max(1, Math.min(5, Math.floor((space + gap) / slot)))
         setVisibleIcons(n)
-        lastWidthRef.current = avail
         return
       }
-      // Desktop: all relevant icons stay; manage text nav.
-      setVisibleIcons(5)
-      if (compactRef.current) {
-        // Collapsed: nav is hidden so its width is unmeasurable.
-        // Only reconsider after meaningful growth; the observer will
-        // re-measure once expanded. Hysteresis prevents flapping.
-        if (avail > lastWidthRef.current + 48) {
-          compactRef.current = false
-          setCompact(false)
-        } else {
-          lastWidthRef.current = avail
-        }
-        return
-      }
+      // Desktop: pick the richest level that fits the full title.
       const nav = inner.querySelector<HTMLElement>('.blog-nav')
-      if (!nav) return
-      const needed = brand.offsetWidth + nav.scrollWidth + actions.offsetWidth + 16
-      if (needed > avail) {
-        compactRef.current = true
-        setCompact(true)
+      if (nav && window.getComputedStyle(nav).display !== 'none') {
+        navFullWRef.current = nav.scrollWidth
       }
-      lastWidthRef.current = avail
+      const navFull = navFullWRef.current
+      const needL0 = brandFull + HGAP + navFull + HGAP + (2 * slot - gap)
+      const needL1 = brandFull + HGAP + (5 * slot - gap)
+      const needL2 = brandFull + HGAP + (4 * slot - gap)
+      const needL3 = brandFull + HGAP + (3 * slot - gap)
+      const needL4 = brandFull + HGAP + (2 * slot - gap)
+      let level = 5
+      if (needL0 <= avail) level = 0
+      else if (needL1 <= avail) level = 1
+      else if (needL2 <= avail) level = 2
+      else if (needL3 <= avail) level = 3
+      else if (needL4 <= avail) level = 4
+      const wantCompact = level >= 1
+      if (wantCompact !== compactRef.current) {
+        compactRef.current = wantCompact
+        setCompact(wantCompact)
+      }
+      setVisibleIcons(level === 0 ? 5 : 6 - level)
     }
     const ro = new ResizeObserver(() => evaluate())
     ro.observe(inner)
+    // Observe brand/nav too: font swaps or content changes can alter their
+    // widths without resizing inner, and props-driven changes re-run this
+    // effect via deps. Together all real flows re-evaluate.
+    const brandEl = inner.querySelector<HTMLElement>('.blog-brand')
+    const navEl = inner.querySelector<HTMLElement>('.blog-nav')
+    if (brandEl) ro.observe(brandEl)
+    if (navEl) ro.observe(navEl)
     evaluate()
     return () => ro.disconnect()
   }, [title, username, path])

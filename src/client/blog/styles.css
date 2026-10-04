@@ -28,6 +28,8 @@
   --blog-prose-max: 720px;
   --blog-page-max: 860px;
   --blog-header-h: 56px;
+  --blog-header-btn-w: 30px;
+  --blog-header-btn-h: 40px;
   --blog-bg-translucent: rgba(250, 249, 247, 0.82);
   --blog-shadow: 0 1px 0 rgb(31 28 24 / 0.03), 0 12px 30px -20px rgb(31 28 24 / 0.25);
   --blog-progress: 0;
@@ -283,7 +285,7 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   margin-left: auto;
 }
 
@@ -294,8 +296,8 @@
 .blog-icon-btn {
   display: inline-grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: var(--blog-header-btn-w);
+  height: var(--blog-header-btn-h);
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -325,8 +327,8 @@
 .blog-menu-toggle {
   display: inline-grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: var(--blog-header-btn-w);
+  height: var(--blog-header-btn-h);
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -2290,6 +2292,13 @@ a.blog-chip:hover {
 }
 
 .blog-header--compact .blog-menu-toggle {
+  display: inline-grid;
+}
+
+/* Compact icon nav (L1+): show the Articles/Moments quick icons even on
+   desktop as the compact form of the text nav. Hidden again one by one
+   by .blog-header--hide-* as space shrinks further. */
+.blog-header--compact .blog-icon-btn--quick {
   display: inline-grid;
 }
 
