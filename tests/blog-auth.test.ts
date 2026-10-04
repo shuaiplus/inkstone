@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeAll, beforeEach } from 'vitest'
-import { blogAuthMiddleware, handleBlogAuth, validateBlogSession, clearBlogSession } from '../src/worker/blog/auth'
+import { blogAuthMiddleware, handleBlogAuth, validateBlogSession, clearBlogSession, getBlogAccent } from '../src/worker/blog/auth'
 import { hashPassword } from '../src/worker/lib/password'
 
 interface MockStatement {
@@ -191,5 +191,55 @@ describe('blog auth', () => {
     await blogAuthMiddleware(c, next)
     expect(set).toHaveBeenCalledWith('blogAuthed', true)
     expect(next).toHaveBeenCalled()
+  })
+})
+
+function mockUserSettingsDb(settings: string | null): MockDb {
+  return {
+    prepare(sql: string) {
+      if (!sql.includes('SELECT settings FROM users')) {
+        throw new Error(`unexpected SQL: ${sql}`)
+      }
+      return {
+        bind(..._args: unknown[]) {
+          return {
+            async all<T = unknown>() {
+              return { results: [] as T[] }
+            },
+            async first<T = unknown>() {
+              return (settings === null ? null : { settings }) as T | null
+            },
+            async run() {
+              return { success: true }
+            },
+          }
+        },
+      }
+    },
+  }
+}
+
+describe('getBlogAccent', () => {
+  it('returns the owner appearance accent', async () => {
+    const db = mockUserSettingsDb(JSON.stringify({ appearance: { accent: 'indigo' } }))
+    expect(await getBlogAccent(db, 'u1')).toBe('indigo')
+  })
+
+  it('falls back to cinnabar when settings are missing', async () => {
+    expect(await getBlogAccent(mockUserSettingsDb(null), 'u1')).toBe('cinnabar')
+  })
+
+  it('falls back to cinnabar for invalid JSON', async () => {
+    expect(await getBlogAccent(mockUserSettingsDb('not-json'), 'u1')).toBe('cinnabar')
+  })
+
+  it('falls back to cinnabar for an unknown accent name', async () => {
+    const db = mockUserSettingsDb(JSON.stringify({ appearance: { accent: 'neon' } }))
+    expect(await getBlogAccent(db, 'u1')).toBe('cinnabar')
+  })
+
+  it('falls back to cinnabar when appearance is absent', async () => {
+    const db = mockUserSettingsDb(JSON.stringify({}))
+    expect(await getBlogAccent(db, 'u1')).toBe('cinnabar')
   })
 })

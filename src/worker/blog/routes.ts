@@ -17,7 +17,7 @@ import {
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
   setBlogDescription, getBlogDescription,
   getBlogPrivateTag, setBlogPublicTag, setBlogPrivateTag,
-  getBlogTagConfig,
+  getBlogTagConfig, getBlogAccent,
   clearBlogSession, deleteBlogSessionCookie,
 } from './auth'
 import { getBlogPasswordHash, ensureBlogShare } from './publish'
@@ -156,6 +156,7 @@ blogRoutes.get('/:username/meta', async (c) => {
     description: await getBlogDescription(c.env.DB, userId),
     publicTag: config.publicTag,
     privateTag: config.privateTag,
+    accent: await getBlogAccent(c.env.DB, userId),
   })
 })
 

@@ -2,6 +2,8 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import type { Context } from 'hono'
 import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, type BlogTagConfig } from '@shared/blog/tags'
+import { ACCENTS } from '@shared/constants'
+import type { AccentName } from '@shared/types'
 import { getMeta, setMeta } from '../db/metadata'
 import type { AppBindings } from '../env'
 import { newId } from '../lib/id'
@@ -90,6 +92,30 @@ export async function getBlogTagConfig(db: D1Database, userId: string): Promise<
     getBlogPrivateTag(db, userId),
   ])
   return { publicTag, privateTag }
+}
+
+const BLOG_ACCENT_NAMES = new Set<string>(ACCENTS.map((accent) => accent.name))
+
+/**
+ * The blog owner's Appearance accent, regardless of visitor login state.
+ * Falls back to 'cinnabar' when unset or unrecognized.
+ */
+export async function getBlogAccent(db: D1Database, userId: string): Promise<AccentName> {
+  try {
+    const row = await db
+      .prepare(`SELECT settings FROM users WHERE id = ?1`)
+      .bind(userId)
+      .first<{ settings: string | null }>()
+    if (!row?.settings) return 'cinnabar'
+    const parsed: unknown = JSON.parse(row.settings)
+    const accent = (parsed as { appearance?: { accent?: unknown } } | null)?.appearance?.accent
+    if (typeof accent === 'string' && BLOG_ACCENT_NAMES.has(accent)) {
+      return accent as AccentName
+    }
+  } catch {
+    // fall through to default
+  }
+  return 'cinnabar'
 }
 
 export async function handleBlogAuth(

@@ -16,7 +16,7 @@
   --blog-border: #e5e1da;
   --blog-border-strong: #d3cec4;
   --blog-accent: #a83c24;
-  --blog-accent-soft: rgba(168, 60, 36, 0.08);
+  --blog-accent-soft: color-mix(in srgb, var(--blog-accent) 8%, transparent);
   --blog-code-bg: #f1efe9;
   --blog-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', 'Noto Sans CJK SC', Roboto, Helvetica, Arial, sans-serif;
@@ -59,7 +59,6 @@
   --blog-border: #3a362f;
   --blog-border-strong: #4a453b;
   --blog-accent: #e0876b;
-  --blog-accent-soft: rgba(224, 135, 107, 0.12);
   --blog-code-bg: #2e2b25;
   --blog-bg-translucent: rgba(28, 27, 25, 0.82);
   --blog-shadow: 0 1px 0 rgb(0 0 0 / 0.3), 0 14px 34px -22px rgb(0 0 0 / 0.55);
@@ -78,6 +77,22 @@
   --blog-callout-warning: #d9b06a;
   --blog-callout-danger: #e08a82;
 }
+
+/* Owner accent (from Settings → Appearance). Cinnabar keeps the built-in
+   warm-paper values above; the rest reuse the main app palette so the blog
+   matches the owner's app theme in both light and dark mode. */
+.blog-app[data-accent='indigo'][data-theme='light'] { --blog-accent: oklch(52% 0.14 252); }
+.blog-app[data-accent='indigo'][data-theme='dark'] { --blog-accent: oklch(72% 0.13 252); }
+.blog-app[data-accent='celadon'][data-theme='light'] { --blog-accent: oklch(49% 0.13 150); }
+.blog-app[data-accent='celadon'][data-theme='dark'] { --blog-accent: oklch(74% 0.12 150); }
+.blog-app[data-accent='amber'][data-theme='light'] { --blog-accent: oklch(56% 0.105 95); }
+.blog-app[data-accent='amber'][data-theme='dark'] { --blog-accent: oklch(80% 0.14 95); }
+.blog-app[data-accent='terracotta'][data-theme='light'] { --blog-accent: oklch(49% 0.075 205); }
+.blog-app[data-accent='terracotta'][data-theme='dark'] { --blog-accent: oklch(76% 0.105 205); }
+.blog-app[data-accent='wisteria'][data-theme='light'] { --blog-accent: oklch(52% 0.16 300); }
+.blog-app[data-accent='wisteria'][data-theme='dark'] { --blog-accent: oklch(72% 0.13 300); }
+.blog-app[data-accent='graphite'][data-theme='light'] { --blog-accent: oklch(38% 0.03 250); }
+.blog-app[data-accent='graphite'][data-theme='dark'] { --blog-accent: oklch(80% 0.025 250); }
 
 /* 2. Base ------------------------------------------------------------------ */
 

@@ -26,11 +26,13 @@ interface DbOptions {
   posts?: unknown[]
   postDetail?: unknown
   blogPrivateNoteIds?: string[]
+  userSettings?: Record<string, string>
 }
 
 function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[] } {
   const users = new Map(Object.entries(options.users ?? {}))
   const meta = options.meta ?? new Map()
+  const userSettings = new Map(Object.entries(options.userSettings ?? {}))
   const posts = options.posts ?? []
   const preparedSqls: string[] = []
   return {
@@ -56,6 +58,10 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[] } {
               }
               if (sql.includes('SELECT password_hash FROM users')) {
                 return (options.accountHash ? { password_hash: options.accountHash } : null) as T | null
+              }
+              if (sql.includes('SELECT settings FROM users')) {
+                const settings = userSettings.get(String(args[0]))
+                return (settings === undefined ? null : { settings }) as T | null
               }
               if (sql.includes('SELECT value FROM app_meta')) {
                 const value = meta.get(String(args[0]))
@@ -231,6 +237,27 @@ describe('blog routes', () => {
     expect(res.status).toBe(200)
     const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ? OFFSET ?'))
     expect(postsSql).toContain('t2.name = ?')
+  })
+
+  it('/meta includes the owner appearance accent', async () => {
+    const db = makeDb({
+      users: { alice: 'u1' },
+      userSettings: { u1: JSON.stringify({ appearance: { accent: 'wisteria' } }) },
+    })
+    const app = makeApp()
+    const res = await app.request('/alice/meta', {}, env(db))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.accent).toBe('wisteria')
+    expect(body.username).toBe('alice')
+  })
+
+  it('/meta falls back to cinnabar when the owner has no accent set', async () => {
+    const db = makeDb({ users: { alice: 'u1' } })
+    const app = makeApp()
+    const res = await app.request('/alice/meta', {}, env(db))
+    expect(res.status).toBe(200)
+    expect((await res.json()).accent).toBe('cinnabar')
   })
 
   it('a valid session on /posts serves the all tier', async () => {

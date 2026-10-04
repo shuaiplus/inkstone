@@ -146,7 +146,7 @@ export default function BlogApp({ username }: {
   const hiddenTags = meta ? [meta.publicTag, meta.privateTag] : []
 
   return (
-    <div ref={appRef} className="blog-app" data-theme={theme}>
+    <div ref={appRef} className="blog-app" data-theme={theme} data-accent={meta?.accent || undefined}>
       <div className="blog-read-progress" aria-hidden />
       <BlogHeader
         username={username}
