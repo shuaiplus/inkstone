@@ -3,6 +3,7 @@ import { blogApi, BlogAuthError, type BlogMeta } from './api'
 import { BlogHeader } from './components/header'
 import { BlogFooter } from './components/footer'
 import { t } from '../lib/i18n'
+import { MOMENTS_TAG } from '@shared/blog/tags'
 import { initialBlogTheme, saveBlogTheme, dispatchBlogTheme, type BlogTheme } from './theme'
 import './styles.css'
 
@@ -143,7 +144,15 @@ export default function BlogApp({ username }: {
     return () => { cancelled = true }
   }, [username])
 
-  const hiddenTags = meta ? [meta.publicTag, meta.privateTag] : []
+  // Moments hides the public + moments markers but keeps the private tag
+  // visible as a locked-content reminder; the tags index hides nothing.
+  const hiddenTags = !meta
+    ? []
+    : Component === MomentsPage
+      ? [meta.publicTag, meta.momentsTag ?? MOMENTS_TAG]
+      : Component === TagsPage
+        ? []
+        : [meta.publicTag, meta.privateTag]
 
   return (
     <div ref={appRef} className="blog-app" data-theme={theme} data-accent={meta?.accent || undefined}>

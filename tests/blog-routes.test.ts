@@ -327,6 +327,7 @@ describe('blog routes', () => {
     const body = await res.json()
     expect(body.accent).toBe('wisteria')
     expect(body.username).toBe('alice')
+    expect(body.momentsTag).toBe('moment')
   })
 
   it('/meta falls back to cinnabar when the owner has no accent set', async () => {

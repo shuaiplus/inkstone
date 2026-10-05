@@ -173,6 +173,7 @@ blogRoutes.get('/:username/meta', async (c) => {
     description: await getBlogDescription(c.env.DB, userId),
     publicTag: config.publicTag,
     privateTag: config.privateTag,
+    momentsTag: config.momentsTag,
     accent: await getBlogAccent(c.env.DB, userId),
   })
 })

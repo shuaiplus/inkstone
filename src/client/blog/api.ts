@@ -35,6 +35,7 @@ export interface BlogMeta {
   description: string | null
   publicTag: string
   privateTag: string
+  momentsTag: string
   accent: string
 }
 
