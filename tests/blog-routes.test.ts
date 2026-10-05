@@ -367,7 +367,7 @@ describe('blog routes', () => {
     expect(await res.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private' })
   })
 
-  it('PUT /settings with password null clears the custom password and re-hashes blog-private shares', async () => {
+  it('PUT /settings with password null clears the custom password without touching posts', async () => {
     const meta: MetaStore = new Map([['blog_password_hash:u1', passwordHash]])
     const db = makeDb({
       users: { alice: 'u1' },
@@ -388,7 +388,8 @@ describe('blog routes', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
     expect(meta.get('blog_password_hash:u1')).toBe('')
-    expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(true)
+    expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(false)
+    expect(db.preparedSqls.some((s) => s.includes('blog_posts'))).toBe(false)
   })
 
   it('PUT /settings with password "" clears the custom password and auth reverts to the account password', async () => {
@@ -442,7 +443,8 @@ describe('blog routes', () => {
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-    expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(true)
+    expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(false)
+    expect(db.preparedSqls.some((s) => s.includes('blog_posts'))).toBe(false)
 
     const settings = await app.request('/settings', {}, env(db))
     expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private' })

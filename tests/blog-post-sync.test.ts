@@ -1,0 +1,93 @@
+import { describe, expect, it } from 'vitest'
+import { syncBlogPost, withdrawBlogPost } from '../src/worker/blog/publish'
+
+interface MockRow {
+  [key: string]: unknown
+}
+
+function makeDb(handlers: Array<[key: string, (args: unknown[]) => Promise<{ all?: MockRow[]; first?: MockRow | null }>]>): {
+  db: unknown
+  sqls: string[]
+  args: unknown[][]
+} {
+  const sqls: string[] = []
+  const args: unknown[][] = []
+  const resolve = (sql: string) =>
+    handlers.find(([key]) => sql.includes(key))?.[1] ?? (async () => ({ all: [], first: null }))
+  const db = {
+    prepare(sql: string) {
+      sqls.push(sql)
+      const handler = resolve(sql)
+      const statement = (a: unknown[]) => ({
+        async all<T = MockRow>() {
+          return { results: ((await handler(a)).all ?? []) as T[] }
+        },
+        async first<T = MockRow>() {
+          return ((await handler(a)).first ?? null) as T | null
+        },
+        async run() {
+          return { success: true }
+        },
+      })
+      return { ...statement([]), bind(...a: unknown[]) { args.push(a); return statement(a) } }
+    },
+  }
+  return { db, sqls, args }
+}
+
+const SETTINGS_ROW = {
+  title: '',
+  description: '',
+  password_hash: 'h',
+  public_tag: 'blog-public',
+  private_tag: 'blog-private',
+  moments_folder: 'Moments',
+}
+
+function syncDb(overrides: { existingSlug?: string | null } = {}): ReturnType<typeof makeDb> {
+  return makeDb([
+    ['FROM blog_settings', async () => ({ first: SETTINGS_ROW })],
+    ['FROM blog_posts', async () => ({ first: overrides.existingSlug ? { slug: overrides.existingSlug } : null })],
+  ])
+}
+
+const hasSql = (sqls: string[], fragment: string): boolean => sqls.some((sql) => sql.includes(fragment))
+
+describe('syncBlogPost', () => {
+  it('writes a public post row instead of a share', async () => {
+    const { db, sqls } = syncDb()
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-public'], { inMoments: false })
+    expect(hasSql(sqls, 'INSERT INTO blog_posts')).toBe(true)
+    expect(hasSql(sqls, 'INTO shares')).toBe(false)
+  })
+
+  it('freezes slug and published_at on re-sync, updating visibility only', async () => {
+    const { db, sqls, args } = syncDb({ existingSlug: 'keep-me' })
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-private'], { inMoments: false })
+    expect(hasSql(sqls, 'INSERT INTO blog_posts')).toBe(false)
+    const update = sqls.findIndex((sql) => sql.includes('UPDATE blog_posts'))
+    expect(update).toBeGreaterThan(-1)
+    expect(args[args.length - 1]).toContain('private')
+  })
+
+  it('withdraws the post row when no blog tier matches', async () => {
+    const { db, sqls } = syncDb()
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['random'], { inMoments: false })
+    expect(hasSql(sqls, 'DELETE FROM blog_posts')).toBe(true)
+  })
+
+  it('marks kind as moment inside the moments folder', async () => {
+    const { db, args } = syncDb()
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', [], { inMoments: true })
+    const insertArgs = args.find((a) => a.includes('public') || a.includes('moment'))
+    expect(insertArgs).toBeDefined()
+    expect(insertArgs).toContain('moment')
+  })
+
+  it('withdrawBlogPost deletes only the post row', async () => {
+    const { db, sqls } = syncDb()
+    await withdrawBlogPost(db as unknown as D1Database, 'u1', 'n1')
+    expect(hasSql(sqls, 'DELETE FROM blog_posts')).toBe(true)
+    expect(hasSql(sqls, 'DELETE FROM shares')).toBe(false)
+  })
+})

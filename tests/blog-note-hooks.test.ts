@@ -196,7 +196,7 @@ function patch(db: unknown, id: string, content: string) {
 }
 
 describe('blog note hooks', () => {
-  it('CREATE with blog-public tag ensures a blog share', async () => {
+  it('CREATE with blog-public tag ensures a blog post', async () => {
     const db = makeDb({ accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, '/api/notes', {
@@ -205,10 +205,10 @@ describe('blog note hooks', () => {
       body: JSON.stringify({ id: N1, content: TAGGED_CONTENT }),
     })
     expect(res.status).toBe(201)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('CREATE in the Moments folder ensures a public blog share without any tag', async () => {
+  it('CREATE in the Moments folder ensures a public blog post without any tag', async () => {
     const db = makeDb({ accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, '/api/notes', {
@@ -217,12 +217,11 @@ describe('blog note hooks', () => {
       body: JSON.stringify({ id: N1, folderId: 'moments-folder', content: UNTAGGED_CONTENT }),
     })
     expect(res.status).toBe(201)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
-    const updateIndex = db.preparedSqls.findIndex((sql) => sql.includes('UPDATE shares SET password_hash'))
-    expect(db.preparedArgs[updateIndex]?.[0]).toBeNull()
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
+    expect(db.hasSql('UPDATE blog_posts')).toBe(false)
   })
 
-  it('PATCH moving a plain note into the Moments folder creates a private blog share', async () => {
+  it('PATCH moving a plain note into the Moments folder creates a private blog post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })], accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}`, {
@@ -231,10 +230,10 @@ describe('blog note hooks', () => {
       body: JSON.stringify({ rev: 1, folderId: 'moments-folder' }),
     })
     expect(res.status).toBe(200)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('PATCH moving a Moments note out of the folder withdraws the blog share', async () => {
+  it('PATCH moving a Moments note out of the folder withdraws the blog post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT, folder_id: 'moments-folder' })], accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}`, {
@@ -243,59 +242,59 @@ describe('blog note hooks', () => {
       body: JSON.stringify({ rev: 1, folderId: null }),
     })
     expect(res.status).toBe(200)
-    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(false)
   })
 
-  it('PATCH to blog-public content ensures a blog share', async () => {
+  it('PATCH to blog-public content ensures a blog post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })], accountHash: 'acct-hash' })
     const res = await patch(db, N1, TAGGED_CONTENT)
     expect(res.status).toBe(200)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
-    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(false)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(false)
   })
 
-  it('PATCH removing a blog tag withdraws the blog share', async () => {
+  it('PATCH removing a blog tag withdraws the blog post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: TAGGED_CONTENT })], accountHash: 'acct-hash' })
     const res = await patch(db, N1, 'a completely different plain note')
     expect(res.status).toBe(200)
-    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(false)
   })
 
-  it('PATCH removing a blog-private tag withdraws the blog share', async () => {
+  it('PATCH removing a blog-private tag withdraws the blog post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: '---\ntags:\n  - blog-private\n---\n# Secret\n' })], accountHash: 'acct-hash' })
     const res = await patch(db, N1, 'a plain note with no blog tags')
     expect(res.status).toBe(200)
-    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(false)
   })
 
   it('PATCH editing a never-blog-tagged note withdraws any existing share', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })], accountHash: 'acct-hash' })
     const res = await patch(db, N1, '# Plain note edited\n')
     expect(res.status).toBe(200)
-    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(false)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(false)
   })
 
-  it('DELETE (trash) withdraws the blog share for a blog-tagged note', async () => {
+  it('DELETE (trash) withdraws the blog post for a blog-tagged note', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: TAGGED_CONTENT })] })
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}`, { method: 'DELETE' })
     expect(res.status).toBe(200)
-    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
   })
 
-  it('DELETE (trash) always withdraws the blog share', async () => {
+  it('DELETE (trash) always withdraws the blog post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })] })
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}`, { method: 'DELETE' })
     expect(res.status).toBe(200)
-    expect(db.hasSql('DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2')).toBe(true)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
   })
 
-  it('RESTORE re-ensures the blog share from the restored content', async () => {
+  it('RESTORE re-ensures the blog post from the restored content', async () => {
     const db = makeDb({
       notes: [seedNote({ id: N1, content: TAGGED_CONTENT, deleted_at: 1700000000000 })],
       accountHash: 'acct-hash',
@@ -303,10 +302,10 @@ describe('blog note hooks', () => {
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}/restore`, { method: 'POST' })
     expect(res.status).toBe(200)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('DUPLICATE ensures a blog share for the copy', async () => {
+  it('DUPLICATE ensures a blog post for the copy', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: TAGGED_CONTENT })], accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}/duplicate`, {
@@ -315,10 +314,10 @@ describe('blog note hooks', () => {
       body: JSON.stringify({ id: N2 }),
     })
     expect(res.status).toBe(201)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('VERSION-RESTORE re-ensures the blog share from the version content', async () => {
+  it('VERSION-RESTORE re-ensures the blog post from the version content', async () => {
     const db = makeDb({
       notes: [seedNote({ id: N1, content: 'current content without tags' })],
       accountHash: 'acct-hash',
@@ -327,10 +326,10 @@ describe('blog note hooks', () => {
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}/versions/v1/restore`, { method: 'POST' })
     expect(res.status).toBe(200)
-    expect(db.hasSql('INSERT OR IGNORE INTO shares')).toBe(true)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('PURGE keeps only its existing guarded share delete (no extra withdraw)', async () => {
+  it('PURGE deletes the share and the blog post together', async () => {
     const db = makeDb({
       notes: [seedNote({ id: N1, content: TAGGED_CONTENT, deleted_at: 1700000000000 })],
     })
@@ -338,5 +337,6 @@ describe('blog note hooks', () => {
     const res = await request(app, db, `/api/notes/${N1}/purge`, { method: 'DELETE' })
     expect(res.status).toBe(200)
     expect(db.countSql('DELETE FROM shares')).toBe(1)
+    expect(db.hasSql('DELETE FROM blog_posts WHERE note_id = ?1')).toBe(true)
   })
 })

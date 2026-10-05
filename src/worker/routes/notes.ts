@@ -11,7 +11,7 @@ import type {
   SortOrder,
   ViewKind,
 } from '@shared/types'
-import { isMomentsFolder, syncBlogShare, withdrawBlogShare } from '../blog/publish'
+import { isMomentsFolder, syncBlogPost, withdrawBlogPost } from '../blog/publish'
 import type { AppBindings } from '../env'
 import { NOTE_COLUMNS, NOTE_COLUMNS_FULL, splitTags, toNote, toNoteSummary, type NoteRow } from '../db/rows'
 import {
@@ -334,7 +334,7 @@ notesRoutes.post('/', async (c) => {
   if (!created) throw ApiError.conflict('This note id is already in use')
   await broadcastCursor(c)
   if (insertResult?.meta.changes) {
-    await syncBlogShare(c.env.DB, userId, id, extractTags(content), {
+    await syncBlogPost(c.env.DB, userId, id, extractTags(content), {
       inMoments: await isMomentsFolder(c.env.DB, userId, folderId),
     })
     await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
@@ -526,7 +526,7 @@ notesRoutes.patch('/:id', async (c) => {
     const nextInMoments = folderChanged
       ? await isMomentsFolder(c.env.DB, userId, newFolderId)
       : await isMomentsFolder(c.env.DB, userId, row.folder_id)
-    await syncBlogShare(
+    await syncBlogPost(
       c.env.DB,
       userId,
       id,
@@ -637,7 +637,7 @@ notesRoutes.delete('/:id', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
-  await withdrawBlogShare(c.env.DB, userId, id)
+  await withdrawBlogPost(c.env.DB, userId, id)
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
   await broadcastCursor(c, changeResult?.results?.[0]?.seq)
   scheduleFtsDrain(c)
@@ -680,7 +680,7 @@ notesRoutes.post('/:id/restore', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
-  await syncBlogShare(c.env.DB, userId, id, extractTags(row.content), {
+  await syncBlogPost(c.env.DB, userId, id, extractTags(row.content), {
     inMoments: await isMomentsFolder(c.env.DB, userId, row.folder_id),
   })
   await broadcastCursor(c)
@@ -715,6 +715,7 @@ notesRoutes.delete('/:id/purge', async (c) => {
           AND ${shiftSqlPlaceholders(guard, 2)}`,
     ).bind(id, userId, id, userId, row.rev),
     guarded(`DELETE FROM shares WHERE note_id = ?1`),
+    guarded(`DELETE FROM blog_posts WHERE note_id = ?1`),
     guarded(`UPDATE attachments SET note_id = NULL WHERE note_id = ?1`),
     c.env.DB.prepare(
       `DELETE FROM import_mappings
@@ -839,7 +840,7 @@ notesRoutes.post('/:id/duplicate', async (c) => {
     }
     throw error
   }
-  await syncBlogShare(c.env.DB, userId, id, extractTags(content), {
+  await syncBlogPost(c.env.DB, userId, id, extractTags(content), {
     inMoments: await isMomentsFolder(c.env.DB, userId, source.folder_id),
   })
   await broadcastCursor(c)
@@ -969,7 +970,7 @@ notesRoutes.post('/:id/versions/:versionId/restore', async (c) => {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
   const currentInMoments = await isMomentsFolder(c.env.DB, userId, current.folder_id)
-  await syncBlogShare(c.env.DB, userId, id, extractTags(version.content), {
+  await syncBlogPost(c.env.DB, userId, id, extractTags(version.content), {
     inMoments: currentInMoments,
   })
   await broadcastCursor(c)

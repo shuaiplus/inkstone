@@ -16,11 +16,10 @@ import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie, BLOG_SESSION_COOKIE,
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
   setBlogDescription, getBlogDescription,
-  getBlogPrivateTag, setBlogPublicTag, setBlogPrivateTag,
+  setBlogPublicTag, setBlogPrivateTag,
   getBlogTagConfig, getBlogAccent,
   clearBlogSession, deleteBlogSessionCookie,
 } from './auth'
-import { getBlogPasswordHash, ensureBlogShare } from './publish'
 import {
   getBlogOwner, getBlogOwnerUsername, hasBlogPassword, listBlogPosts, getBlogPost,
   listBlogMoments, listBlogTimeline, listBlogTags, listPostsByTag,
@@ -43,23 +42,6 @@ blogRoutes.get('/settings', async (c) => {
   })
 })
 
-async function rehashBlogPrivateShares(db: D1Database, userId: string): Promise<void> {
-  const privateTag = await getBlogPrivateTag(db, userId)
-  const newHash = await getBlogPasswordHash(db, userId)
-  const { results } = await db
-    .prepare(
-      `SELECT n.id FROM notes n
-        JOIN note_tags nt ON nt.note_id = n.id
-        JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
-       WHERE n.user_id = ?1 AND n.deleted_at IS NULL AND t.name = ?2`,
-    )
-    .bind(userId, privateTag)
-    .all<{ id: string }>()
-  for (const row of results) {
-    await ensureBlogShare(db, userId, row.id, 'private', newHash)
-  }
-}
-
 blogRoutes.put('/settings', async (c) => {
   const userId = c.get('userId')
   const body = await readJson<{
@@ -75,7 +57,8 @@ blogRoutes.put('/settings', async (c) => {
     }
     if (body.password === null || body.password === '') await clearBlogPassword(c.env.DB, userId)
     else await setBlogPassword(c.env.DB, userId, body.password)
-    await rehashBlogPrivateShares(c.env.DB, userId)
+    // No per-post rehash: visibility lives in blog_posts, the password
+    // check reads blog_settings at request time.
   }
   if (body.title !== undefined) await setBlogTitle(c.env.DB, userId, body.title)
   if (body.description !== undefined) await setBlogDescription(c.env.DB, userId, body.description ?? '')

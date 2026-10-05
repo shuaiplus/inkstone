@@ -1,8 +1,6 @@
-import { blogTierOfTags, MOMENTS_FOLDER_NAME, type BlogTagConfig, type BlogTier } from '@shared/blog/tags'
+import { blogTierOfTags, type BlogTagConfig, type BlogTier } from '@shared/blog/tags'
 import { newSlug } from '../lib/id'
-import { getBlogPasswordHash, getBlogTagConfig } from './auth'
-
-export { getBlogPasswordHash }
+import { getBlogSettings } from './settings'
 
 export function blogTier(inMoments: boolean, tags: readonly string[], config?: BlogTagConfig): BlogTier {
   if (inMoments) {
@@ -15,56 +13,84 @@ export function blogTier(inMoments: boolean, tags: readonly string[], config?: B
 
 export async function isMomentsFolder(db: D1Database, userId: string, folderId: string | null): Promise<boolean> {
   if (!folderId) return false
+  const { momentsFolder } = await getBlogSettings(db, userId)
   const row = await db.prepare(
     `SELECT 1 AS found FROM folders f
       WHERE f.id = ?1 AND f.user_id = ?2 AND f.name = ?3
         AND f.parent_id IS NULL AND f.deleted_at IS NULL
       LIMIT 1`,
   )
-    .bind(folderId, userId, MOMENTS_FOLDER_NAME)
+    .bind(folderId, userId, momentsFolder)
     .first<{ found: number }>()
   return Boolean(row)
 }
 
-export async function ensureBlogShare(
+export async function ensureBlogPost(
   db: D1Database,
   userId: string,
   noteId: string,
-  tier: BlogTier,
-  effectiveHash: string,
+  tier: Exclude<BlogTier, 'none'>,
+  kind: 'article' | 'moment',
 ): Promise<void> {
+  const existing = await db
+    .prepare(`SELECT slug FROM blog_posts WHERE user_id = ?1 AND note_id = ?2`)
+    .bind(userId, noteId)
+    .first<{ slug: string }>()
+  const now = Date.now()
+  if (existing) {
+    // Slug and published_at stay frozen; only visibility/kind move.
+    await db
+      .prepare(`UPDATE blog_posts SET visibility = ?1, kind = ?2, updated_at = ?3 WHERE user_id = ?4 AND note_id = ?5`)
+      .bind(tier, kind, now, userId, noteId)
+      .run()
+    return
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await db
+        .prepare(
+          `INSERT INTO blog_posts
+            (user_id, note_id, slug, visibility, kind, is_pinned, pinned_at, published_at, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, ?6, ?7, ?8)`,
+        )
+        .bind(userId, noteId, newSlug(), tier, kind, now, now, now)
+        .run()
+      return
+    } catch {
+      // Per-user slug collision: retry with a fresh slug.
+    }
+  }
   await db
     .prepare(
-      `INSERT OR IGNORE INTO shares (slug, note_id, user_id, password_hash, expires_at, views, created_at) VALUES (?,?,?,?,NULL,0,?)`,
+      `INSERT OR IGNORE INTO blog_posts
+        (user_id, note_id, slug, visibility, kind, is_pinned, pinned_at, published_at, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, ?6, ?7, ?8)`,
     )
-    .bind(newSlug(), noteId, userId, tier === 'private' ? effectiveHash : null, Date.now())
-    .run()
-  await db
-    .prepare(`UPDATE shares SET password_hash = ?, expires_at = NULL WHERE note_id = ? AND user_id = ?`)
-    .bind(tier === 'private' ? effectiveHash : null, noteId, userId)
+    .bind(userId, noteId, `${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, now, now, now)
     .run()
 }
 
-export async function withdrawBlogShare(
+export async function withdrawBlogPost(
   db: D1Database,
   userId: string,
   noteId: string,
 ): Promise<void> {
-  await db.prepare(`DELETE FROM shares WHERE note_id = ?1 AND user_id = ?2`).bind(noteId, userId).run()
+  await db.prepare(`DELETE FROM blog_posts WHERE user_id = ?1 AND note_id = ?2`).bind(userId, noteId).run()
 }
 
-export async function syncBlogShare(
+export async function syncBlogPost(
   db: D1Database,
   userId: string,
   noteId: string,
   tags: readonly string[],
   opts?: { inMoments?: boolean },
 ): Promise<void> {
-  const config = await getBlogTagConfig(db, userId)
-  const tier = blogTier(opts?.inMoments ?? false, tags, config)
+  const settings = await getBlogSettings(db, userId)
+  const inMoments = opts?.inMoments ?? false
+  const tier = blogTier(inMoments, tags, settings)
   if (tier === 'none') {
-    await withdrawBlogShare(db, userId, noteId)
+    await withdrawBlogPost(db, userId, noteId)
     return
   }
-  await ensureBlogShare(db, userId, noteId, tier, await getBlogPasswordHash(db, userId))
+  await ensureBlogPost(db, userId, noteId, tier, inMoments ? 'moment' : 'article')
 }
