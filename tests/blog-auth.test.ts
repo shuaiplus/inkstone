@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeAll, beforeEach } from 'vitest'
 import { blogAuthMiddleware, handleBlogAuth, validateBlogSession, clearBlogSession, getBlogAccent, setBlogPassword } from '../src/worker/blog/auth'
+import { trackAccountPasswordChange } from '../src/worker/blog/settings'
 import { hashPassword } from '../src/worker/lib/password'
 
 interface MockStatement {
@@ -200,6 +201,12 @@ describe('blog auth', () => {
     expect(await validateBlogSession(db, 'u1', token!)).toBe(false)
     expect(db.sqls.some((sql) => sql.includes('INSERT INTO blog_settings'))).toBe(true)
     expect(db.sqls.some((sql) => sql.includes('DELETE FROM blog_sessions WHERE user_id'))).toBe(true)
+  })
+
+  it('trackAccountPasswordChange follows account rotation only when tracking it', async () => {
+    const db = makeMetaDb(new Map())
+    await trackAccountPasswordChange(db, 'u1', 'old-hash', 'new-hash')
+    expect(db.sqls.some((sql) => sql.includes('UPDATE blog_settings SET password_hash'))).toBe(true)
   })
 
   it('clearBlogSession deletes only the given session token', async () => {

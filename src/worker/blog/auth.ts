@@ -39,6 +39,9 @@ export async function getBlogPasswordHash(db: D1Database, userId: string): Promi
 
 async function invalidateBlogSessions(db: D1Database, userId: string): Promise<void> {
   await db.prepare(`DELETE FROM blog_sessions WHERE user_id = ?1`).bind(userId).run()
+  // Transitional: also drop pre-v14 keys so a password change revokes
+  // sessions the seed has not migrated yet.
+  await db.prepare(`DELETE FROM app_meta WHERE key LIKE ?1`).bind(`${LEGACY_BLOG_SESSION_PREFIX}${userId}:%`).run()
 }
 
 export async function clearBlogSession(db: D1Database, userId: string, token: string): Promise<void> {

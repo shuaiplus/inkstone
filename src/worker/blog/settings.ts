@@ -61,17 +61,36 @@ export async function updateBlogSettings(
     )
     .run()
 }
-
 export async function setBlogPasswordHash(db: D1Database, userId: string, passwordHash: string): Promise<void> {
   const now = Date.now()
+  const current = await getBlogSettings(db, userId)
   await db
     .prepare(
       `INSERT INTO blog_settings
         (user_id, title, description, password_hash, public_tag, private_tag, moments_folder, created_at, updated_at)
-        VALUES (?1, '', '', ?2, 'blog-public', 'blog-private', 'Moments', ?3, ?4)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
         ON CONFLICT(user_id) DO UPDATE SET password_hash = excluded.password_hash, updated_at = excluded.updated_at`,
     )
-    .bind(userId, passwordHash, now, now)
+    .bind(userId, current.title, current.description, passwordHash, current.publicTag, current.privateTag, current.momentsFolder, now, now)
+    .run()
+}
+
+/**
+ * Follows an account password rotation in blog_settings, but only when the
+ * blog was tracking the account password (a custom password is untouched).
+ */
+export async function trackAccountPasswordChange(
+  db: D1Database,
+  userId: string,
+  oldHash: string,
+  newHash: string,
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE blog_settings SET password_hash = ?1, updated_at = ?2
+        WHERE user_id = ?3 AND password_hash = ?4`,
+    )
+    .bind(newHash, Date.now(), userId, oldHash)
     .run()
 }
 

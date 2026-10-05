@@ -101,8 +101,11 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[]; blo
               }
               if (sql.includes('COUNT(*) AS count'))
                 return { count: posts.length } as T | null
-              if (sql.includes('n.content'))
+              if (sql.includes('n.content')) {
+                // Tier-scoped lookup: a public-tier query cannot see private posts.
+                if (sql.includes("bp.visibility = 'public'")) return null as T | null
                 return (options.postDetail ?? null) as T | null
+              }
               return null as T | null
             },
             async run() {
@@ -118,10 +121,12 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[]; blo
                 return { success: true }
               }
               if (sql.includes('INSERT INTO blog_settings')) {
-                if (args.length > 4) {
-                  momentsFolders.set(String(args[0]), String(args[5]))
+                // Password upsert binds 9 args (hash at index 3); the full
+                // settings upsert binds 8 args (moments folder at index 5).
+                if (args.length === 9) {
+                  blogSettings.set(String(args[0]), String(args[3]))
                 } else {
-                  blogSettings.set(String(args[0]), String(args[1]))
+                  momentsFolders.set(String(args[0]), String(args[5]))
                 }
                 return { success: true }
               }
@@ -588,14 +593,11 @@ describe('blog routes', () => {
     expect(await newAuth.json()).toEqual({ ok: true })
   })
 
-  it('posts/:slug returns 401 for a blog-private post without a session', async () => {
+  it('posts/:slug returns 404 for a blog-private post without a session', async () => {
     const db = makeDb({ users: { alice: 'u1' }, postDetail: privatePostDetail() })
     const app = makeApp()
     const res = await app.request('/alice/posts/private-post', {}, env(db))
-    expect(res.status).toBe(401)
-    expect(await res.json()).toEqual({
-      error: { code: 'blog_auth_required', message: 'Blog authentication required' },
-    })
+    expect(res.status).toBe(404)
   })
 
   it('posts/:slug returns 200 for a blog-private post with a session', async () => {

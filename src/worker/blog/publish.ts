@@ -1,7 +1,7 @@
 import { blogTierOfTags, type BlogTagConfig, type BlogTier } from '@shared/blog/tags'
 import { newSlug } from '../lib/id'
 import { splitTags } from '../db/rows'
-import { getBlogSettings } from './settings'
+import { getBlogSettings, type BlogSettings } from './settings'
 
 export function blogTier(inMoments: boolean, tags: readonly string[], config?: BlogTagConfig): BlogTier {
   if (inMoments) {
@@ -57,18 +57,35 @@ export async function ensureBlogPost(
         .bind(userId, noteId, newSlug(), tier, kind, now, now, now)
         .run()
       return
-    } catch {
-      // Per-user slug collision: retry with a fresh slug.
+    } catch (error) {
+      // Per-user slug collision: retry with a fresh slug. Anything else is
+      // a real bug and must surface instead of looping.
+      if (!isUniqueViolation(error)) throw error
     }
   }
-  await db
+  // Lost the slug race (or a concurrent insert won the PK race): update the
+  // row so the visibility/kind change is never silently dropped.
+  const updated = await db
     .prepare(
-      `INSERT OR IGNORE INTO blog_posts
-        (user_id, note_id, slug, visibility, kind, is_pinned, pinned_at, published_at, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, ?6, ?7, ?8)`,
+      `UPDATE blog_posts SET slug = ?1, visibility = ?2, kind = ?3, updated_at = ?4
+        WHERE user_id = ?5 AND note_id = ?6`,
     )
-    .bind(userId, noteId, `${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, now, now, now)
+    .bind(`${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, Date.now(), userId, noteId)
     .run()
+  if (!updated.meta.changes) {
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO blog_posts
+          (user_id, note_id, slug, visibility, kind, is_pinned, pinned_at, published_at, created_at, updated_at)
+          VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, ?6, ?7, ?8)`,
+      )
+      .bind(userId, noteId, `${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, now, now, now)
+      .run()
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return error instanceof Error && /unique constraint failed|UNIQUE constraint failed/i.test(error.message)
 }
 
 export async function withdrawBlogPost(
@@ -84,9 +101,9 @@ export async function syncBlogPost(
   userId: string,
   noteId: string,
   tags: readonly string[],
-  opts?: { inMoments?: boolean },
+  opts?: { inMoments?: boolean; settings?: BlogSettings },
 ): Promise<void> {
-  const settings = await getBlogSettings(db, userId)
+  const settings = opts?.settings ?? (await getBlogSettings(db, userId))
   const inMoments = opts?.inMoments ?? false
   const tier = blogTier(inMoments, tags, settings)
   if (tier === 'none') {
@@ -126,6 +143,6 @@ export async function resyncBlogPosts(db: D1Database, userId: string): Promise<v
       note.folder_name === settings.momentsFolder &&
       note.folder_parent === null &&
       note.folder_deleted === null
-    await syncBlogPost(db, userId, note.id, splitTags(note.tag_names), { inMoments })
+    await syncBlogPost(db, userId, note.id, splitTags(note.tag_names), { inMoments, settings })
   }
 }

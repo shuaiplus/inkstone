@@ -202,7 +202,9 @@ blogRoutes.get('/:username/posts', async (c) => {
 
 blogRoutes.get('/:username/posts/:slug', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), 'all')
+  // Tier-scoped lookup: anonymous visitors get a 404 for private posts
+  // (no existence oracle); the visibility gate below is defense in depth.
+  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), requestTier(c))
   if (!post) return c.json({ error: { code: 'not_found', message: 'Post not found' } }, 404)
   if (post.visibility === 'private' && !c.get('blogAuthed')) {
     return c.json({ error: { code: 'blog_auth_required', message: 'Blog authentication required' } }, 401)

@@ -201,6 +201,7 @@ notesRoutes.post('/trash/empty', async (c) => {
          )`,
       ).bind(userId),
       c.env.DB.prepare(`DELETE FROM shares WHERE note_id IN (${trashed})`).bind(userId),
+      c.env.DB.prepare(`DELETE FROM blog_posts WHERE note_id IN (${trashed})`).bind(userId),
       c.env.DB.prepare(`UPDATE attachments SET note_id = NULL WHERE note_id IN (${trashed})`).bind(userId),
       c.env.DB.prepare(
         `DELETE FROM import_mappings

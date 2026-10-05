@@ -67,6 +67,9 @@ function makeDb(options: DbOptions = {}) {
               if (sql.includes('SELECT 1 AS found FROM folders f')) {
                 return (String(args[0]) === 'moments-folder' ? { found: 1 } : null) as T | null
               }
+              if (sql.includes('FROM notes WHERE user_id')) {
+                return { count: 1 } as T | null
+              }
               if (sql.includes('SELECT value FROM app_meta')) {
                 const key = String(args[0])
                 const value = key.startsWith('blog_password_hash:') ? options.customHash : undefined
@@ -278,12 +281,13 @@ describe('blog note hooks', () => {
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(false)
   })
 
-  it('DELETE (trash) withdraws the blog post for a blog-tagged note', async () => {
+  it('DELETE (trash) withdraws the blog post but keeps manual shares', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: TAGGED_CONTENT })] })
     const app = makeApp(db)
     const res = await request(app, db, `/api/notes/${N1}`, { method: 'DELETE' })
     expect(res.status).toBe(200)
     expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
+    expect(db.hasSql('DELETE FROM shares')).toBe(false)
   })
 
   it('DELETE (trash) always withdraws the blog post', async () => {
@@ -327,6 +331,14 @@ describe('blog note hooks', () => {
     const res = await request(app, db, `/api/notes/${N1}/versions/v1/restore`, { method: 'POST' })
     expect(res.status).toBe(200)
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
+  })
+
+  it('TRASH-EMPTY deletes blog posts for trashed notes', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: TAGGED_CONTENT, deleted_at: 1700000000000 })] })
+    const app = makeApp(db)
+    const res = await request(app, db, '/api/notes/trash/empty', { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(db.hasSql('DELETE FROM blog_posts WHERE note_id IN (')).toBe(true)
   })
 
   it('PURGE deletes the share and the blog post together', async () => {

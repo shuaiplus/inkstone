@@ -9,6 +9,7 @@ import type {
   BlogTimelineResponse,
 } from '@shared/blog/types'
 import { extractAttachmentIds, firstImageSrc, parseFrontMatter } from '@shared/markdown-utils'
+import { getMeta } from '../db/metadata'
 import { splitTags } from '../db/rows'
 
 function frontMatterCreated(content: string | null | undefined): number | null {
@@ -95,10 +96,13 @@ export async function hasBlogPassword(db: D1Database, userId: string): Promise<b
       .bind(userId)
       .first<{ password_hash: string }>(),
   ])
-  if (!settings?.password_hash) return false
-  // Clearing the custom password materializes the account hash, so a
-  // custom password exists exactly when the two differ.
-  return settings.password_hash !== account?.password_hash
+  if (settings?.password_hash) {
+    // Clearing the custom password materializes the account hash, so a
+    // custom password exists exactly when the two differ.
+    return settings.password_hash !== account?.password_hash
+  }
+  // Transitional: pre-v14 rows may not be seeded yet.
+  return Boolean(await getMeta(db, `blog_password_hash:${userId}`))
 }
 
 /**

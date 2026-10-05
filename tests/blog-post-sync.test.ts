@@ -90,4 +90,56 @@ describe('syncBlogPost', () => {
     expect(hasSql(sqls, 'DELETE FROM blog_posts')).toBe(true)
     expect(hasSql(sqls, 'DELETE FROM shares')).toBe(false)
   })
+
+  it('retries a slug collision but surfaces non-unique errors', async () => {
+    let inserts = 0
+    const sqls: string[] = []
+    const flaky = {
+      prepare(sql: string) {
+        sqls.push(sql)
+        return {
+          bind(..._args: unknown[]) {
+            return {
+              async all<T>() {
+                return { results: [] as T[] }
+              },
+              async first() {
+                if (sql.includes('FROM blog_settings')) return SETTINGS_ROW as never
+                return null as never
+              },
+              async run() {
+                if (sql.includes('INSERT INTO blog_posts')) {
+                  inserts++
+                  if (inserts === 1) throw new Error('UNIQUE constraint failed: blog_posts.slug')
+                }
+                return { success: true, meta: { changes: 1 } }
+              },
+            }
+          },
+        }
+      },
+    }
+    await syncBlogPost(flaky as unknown as D1Database, 'u1', 'n1', ['blog-public'], { inMoments: false })
+    expect(inserts).toBe(2)
+    const failing = {
+      prepare() {
+        return {
+          bind(..._args: unknown[]) {
+            return {
+              async all<T>() {
+                return { results: [] as T[] }
+              },
+              async first() {
+                return null as never
+              },
+              async run(): Promise<never> {
+                throw new Error('boom')
+              },
+            }
+          },
+        }
+      },
+    }
+    await expect(syncBlogPost(failing as unknown as D1Database, 'u1', 'n1', ['blog-public'], { inMoments: false })).rejects.toThrow('boom')
+  })
 })

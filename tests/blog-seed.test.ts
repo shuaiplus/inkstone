@@ -96,6 +96,18 @@ describe('seedBlogTables', () => {
     expect(hasSql(db, 'INSERT OR IGNORE INTO blog_posts')).toBe(true)
   })
 
+  it('skips expired shares, trashed notes, and non-root moments folders', async () => {
+    const { db } = seedDb({
+      shares: [{ slug: 'hello', note_id: 'n1', created_at: 1000 }],
+      tagNames: ['blog-public'],
+    })
+    await seedBlogTables(db as unknown as D1Database)
+    expect(hasSql(db, 's.expires_at IS NULL')).toBe(true)
+    expect(hasSql(db, 'n.deleted_at IS NULL')).toBe(true)
+    expect(hasSql(db, 'f.parent_id')).toBe(true)
+    expect(hasSql(db, 'f.deleted_at')).toBe(true)
+  })
+
   it('moves blog sessions into blog_sessions and clears old keys', async () => {
     const { db } = seedDb({
       sessions: [{ key: 'blog_session:u1:tok', value: '9999999999999' }],

@@ -98,8 +98,13 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
   // names land in blog_settings.moments_folder from here on.
   const resolvedMoments = MOMENTS_FOLDER_NAME
   const { results: shares } = await db
-    .prepare(`SELECT slug, note_id, created_at FROM shares WHERE user_id = ?1`)
-    .bind(userId)
+    .prepare(
+      `SELECT s.slug, s.note_id, s.created_at FROM shares s
+         JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
+        WHERE s.user_id = ?1 AND n.deleted_at IS NULL
+          AND (s.expires_at IS NULL OR s.expires_at > ?2)`,
+    )
+    .bind(userId, Date.now())
     .all<SeedShare>()
   const now = Date.now()
   for (const share of shares) {
@@ -120,13 +125,16 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
     if (!visibility) continue
     const folder = await db
       .prepare(
-        `SELECT f.name FROM notes n
+        `SELECT f.name, f.parent_id, f.deleted_at FROM notes n
            JOIN folders f ON f.id = n.folder_id
           WHERE n.id = ?1 AND n.user_id = ?2`,
       )
       .bind(share.note_id, userId)
-      .first<{ name: string }>()
-    const kind = folder?.name === resolvedMoments ? 'moment' : 'article'
+      .first<{ name: string; parent_id: string | null; deleted_at: number | null }>()
+    const kind =
+      folder?.name === resolvedMoments && folder.parent_id === null && folder.deleted_at === null
+        ? 'moment'
+        : 'article'
     await db
       .prepare(
         `INSERT OR IGNORE INTO blog_posts
