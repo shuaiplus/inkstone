@@ -144,15 +144,11 @@ export default function BlogApp({ username }: {
     return () => { cancelled = true }
   }, [username])
 
-  // Moments hides the public + moments markers but keeps the private tag
-  // visible as a locked-content reminder; the tags index hides nothing.
-  const hiddenTags = !meta
+  // Category and visibility markers are hidden everywhere except the tags
+  // index; the private tag stays visible as a locked-content reminder.
+  const hiddenTags = !meta || Component === TagsPage
     ? []
-    : Component === MomentsPage
-      ? [meta.publicTag, meta.momentsTag ?? MOMENTS_TAG]
-      : Component === TagsPage
-        ? []
-        : [meta.publicTag, meta.privateTag]
+    : [meta.publicTag, meta.momentsTag ?? MOMENTS_TAG]
 
   return (
     <div ref={appRef} className="blog-app" data-theme={theme} data-accent={meta?.accent || undefined}>
