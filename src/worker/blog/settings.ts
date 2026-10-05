@@ -14,6 +14,9 @@ const BLOG_DESCRIPTION_KEY = (userId: string): string => `blog_description:${use
 const BLOG_PUBLIC_TAG_KEY = (userId: string): string => `blog_public_tag:${userId}`
 const BLOG_PRIVATE_TAG_KEY = (userId: string): string => `blog_private_tag:${userId}`
 
+/** Legacy app_meta session key format, kept for seed + transitional reads. */
+export const LEGACY_BLOG_SESSION_PREFIX = 'blog_session:'
+
 interface BlogSettingsRow {
   title: string
   description: string
@@ -23,9 +26,59 @@ interface BlogSettingsRow {
 }
 
 /**
+ * Partial update of blog_settings, creating the row when the user was
+ * created after the v14 seed marker. Only touched columns move.
+ */
+export async function updateBlogSettings(
+  db: D1Database,
+  userId: string,
+  patch: Partial<Pick<BlogSettings, 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsFolder'>>,
+): Promise<void> {
+  const now = Date.now()
+  const current = await getBlogSettings(db, userId)
+  await db
+    .prepare(
+      `INSERT INTO blog_settings
+        (user_id, title, description, password_hash, public_tag, private_tag, moments_folder, created_at, updated_at)
+        VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8)
+        ON CONFLICT(user_id) DO UPDATE SET
+          title = excluded.title,
+          description = excluded.description,
+          public_tag = excluded.public_tag,
+          private_tag = excluded.private_tag,
+          moments_folder = excluded.moments_folder,
+          updated_at = excluded.updated_at`,
+    )
+    .bind(
+      userId,
+      patch.title ?? current.title,
+      patch.description ?? current.description,
+      patch.publicTag ?? current.publicTag,
+      patch.privateTag ?? current.privateTag,
+      patch.momentsFolder ?? current.momentsFolder,
+      now,
+      now,
+    )
+    .run()
+}
+
+export async function setBlogPasswordHash(db: D1Database, userId: string, passwordHash: string): Promise<void> {
+  const now = Date.now()
+  await db
+    .prepare(
+      `INSERT INTO blog_settings
+        (user_id, title, description, password_hash, public_tag, private_tag, moments_folder, created_at, updated_at)
+        VALUES (?1, '', '', ?2, 'blog-public', 'blog-private', 'Moments', ?3, ?4)
+        ON CONFLICT(user_id) DO UPDATE SET password_hash = excluded.password_hash, updated_at = excluded.updated_at`,
+    )
+    .bind(userId, passwordHash, now, now)
+    .run()
+}
+
+/**
  * Reads blog_settings, falling back to the app_meta era keys while writers
- * still target app_meta. Writers move in a later phase; the table is the
- * source of truth whenever its row exists.
+ * still target app_meta. The table is the source of truth whenever its row
+ * exists.
  */
 export async function getBlogSettings(db: D1Database, userId: string): Promise<BlogSettings> {
   const row = await db

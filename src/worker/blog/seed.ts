@@ -1,6 +1,6 @@
 import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
 import { getMeta, setMeta } from '../db/metadata'
-import { BLOG_SESSION_PREFIX } from './auth'
+import { LEGACY_BLOG_SESSION_PREFIX } from './settings'
 
 export const BLOG_SEED_MARKER = 'blog_seed:v14'
 
@@ -64,11 +64,11 @@ async function seedUserSettings(db: D1Database, user: SeedUser): Promise<void> {
 async function seedUserSessions(db: D1Database, userId: string): Promise<void> {
   const { results } = await db
     .prepare(`SELECT key, value FROM app_meta WHERE key LIKE ?1`)
-    .bind(`${BLOG_SESSION_PREFIX}${userId}:%`)
+    .bind(`${LEGACY_BLOG_SESSION_PREFIX}${userId}:%`)
     .all<{ key: string; value: string }>()
   const now = Date.now()
   for (const row of results) {
-    const token = row.key.slice(`${BLOG_SESSION_PREFIX}${userId}:`.length)
+    const token = row.key.slice(`${LEGACY_BLOG_SESSION_PREFIX}${userId}:`.length)
     if (!token) continue
     await db
       .prepare(

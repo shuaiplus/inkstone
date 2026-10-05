@@ -29,14 +29,25 @@ interface DbOptions {
   userSettings?: Record<string, string>
 }
 
-function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[] } {
+function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[]; blogSettings: Map<string, string> } {
   const users = new Map(Object.entries(options.users ?? {}))
   const meta = options.meta ?? new Map()
   const userSettings = new Map(Object.entries(options.userSettings ?? {}))
   const posts = options.posts ?? []
+  // Mirrors the v14 seed: effective hash = custom app_meta key, else account.
+  const blogSettings = new Map<string, string>()
+  const seedCustom = meta.get('blog_password_hash:u1')
+  if (seedCustom) blogSettings.set('u1', seedCustom)
+  else if (options.accountHash) blogSettings.set('u1', options.accountHash)
+  const sessions = new Map<string, { userId: string; expiresAt: number }>()
+  for (const [key, value] of meta) {
+    const match = /^blog_session:([^:]+):(.+)$/.exec(key)
+    if (match) sessions.set(match[2]!, { userId: match[1]!, expiresAt: Number(value) })
+  }
   const preparedSqls: string[] = []
   return {
     preparedSqls,
+    blogSettings,
     prepare(sql: string) {
       preparedSqls.push(sql)
       return {
@@ -56,6 +67,14 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[] } {
                 const id = users.get(String(args[0]))
                 return (id ? { id } : null) as T | null
               }
+              if (sql.includes('SELECT password_hash FROM blog_settings')) {
+                const hash = blogSettings.get(String(args[0]))
+                return (hash === undefined ? null : { password_hash: hash }) as T | null
+              }
+              if (sql.includes('SELECT expires_at FROM blog_sessions')) {
+                const row = sessions.get(String(args[0]))
+                return (row === undefined ? null : { expires_at: row.expiresAt }) as T | null
+              }
               if (sql.includes('SELECT password_hash FROM users')) {
                 return (options.accountHash ? { password_hash: options.accountHash } : null) as T | null
               }
@@ -74,6 +93,21 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[] } {
               return null as T | null
             },
             async run() {
+              if (sql.includes('INSERT INTO blog_sessions')) {
+                sessions.set(String(args[0]), { userId: String(args[1]), expiresAt: Number(args[2]) })
+                return { success: true }
+              }
+              if (sql.includes('DELETE FROM blog_sessions')) {
+                if (sql.includes('WHERE token')) sessions.delete(String(args[0]))
+                else for (const [token, row] of [...sessions]) {
+                  if (row.userId === String(args[0])) sessions.delete(token)
+                }
+                return { success: true }
+              }
+              if (sql.includes('INSERT INTO blog_settings')) {
+                blogSettings.set(String(args[0]), String(args[1]))
+                return { success: true }
+              }
               if (sql.includes('INSERT INTO app_meta')) {
                 meta.set(String(args[0]), String(args[1]))
                 return { success: true }
@@ -388,7 +422,7 @@ describe('blog routes', () => {
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-    expect(meta.get('blog_password_hash:u1')).toBe('')
+    expect(db.blogSettings.get('u1')).toBe(passwordHash)
     expect(db.preparedSqls.some((s) => s.includes('UPDATE shares SET password_hash'))).toBe(false)
     expect(db.preparedSqls.some((s) => s.includes('blog_posts'))).toBe(false)
   })
@@ -408,7 +442,7 @@ describe('blog routes', () => {
     )
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
-    expect(meta.get('blog_password_hash:u1')).toBe('')
+    expect(db.blogSettings.get('u1')).toBe(passwordHash)
 
     const settings = await app.request('/settings', {}, env(db))
     expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private' })
