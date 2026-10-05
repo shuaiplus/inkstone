@@ -1,4 +1,4 @@
-import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENT_PRIVATE_TAG, MOMENT_PUBLIC_TAG } from '@shared/blog/tags'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG } from '@shared/blog/tags'
 import { getMeta } from '../db/metadata'
 
 export interface BlogSettings {
@@ -6,9 +6,20 @@ export interface BlogSettings {
   description: string
   publicTag: string
   privateTag: string
-  momentsPublicTag: string
-  momentsPrivateTag: string
+  momentsTag: string
 }
+
+export interface BlogTagConfigPatch {
+  publicTag?: string
+  privateTag?: string
+  momentsTag?: string
+}
+
+const DEFAULT_TAG_CONFIG = {
+  publicTag: BLOG_PUBLIC_TAG,
+  privateTag: BLOG_PRIVATE_TAG,
+  momentsTag: MOMENTS_TAG,
+} as const
 
 const BLOG_TITLE_KEY = (userId: string): string => `blog_title:${userId}`
 const BLOG_DESCRIPTION_KEY = (userId: string): string => `blog_description:${userId}`
@@ -21,10 +32,24 @@ export const LEGACY_BLOG_SESSION_PREFIX = 'blog_session:'
 interface BlogSettingsRow {
   title: string
   description: string
-  public_tag: string
-  private_tag: string
-  moments_public_tag: string | null
-  moments_private_tag: string | null
+  settings_json: string
+}
+
+function parseTagConfig(raw: string | null): Pick<BlogSettings, 'publicTag' | 'privateTag' | 'momentsTag'> {
+  let parsed: BlogTagConfigPatch = {}
+  if (raw) {
+    try {
+      const value: unknown = JSON.parse(raw)
+      if (value && typeof value === 'object') parsed = value as BlogTagConfigPatch
+    } catch {
+      // Corrupt JSON falls back to defaults below.
+    }
+  }
+  return {
+    publicTag: typeof parsed.publicTag === 'string' && parsed.publicTag ? parsed.publicTag : DEFAULT_TAG_CONFIG.publicTag,
+    privateTag: typeof parsed.privateTag === 'string' && parsed.privateTag ? parsed.privateTag : DEFAULT_TAG_CONFIG.privateTag,
+    momentsTag: typeof parsed.momentsTag === 'string' && parsed.momentsTag ? parsed.momentsTag : DEFAULT_TAG_CONFIG.momentsTag,
+  }
 }
 
 /**
@@ -34,49 +59,49 @@ interface BlogSettingsRow {
 export async function updateBlogSettings(
   db: D1Database,
   userId: string,
-  patch: Partial<Pick<BlogSettings, 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsPublicTag' | 'momentsPrivateTag'>>,
+  patch: Partial<Pick<BlogSettings, 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsTag'>>,
 ): Promise<void> {
   const now = Date.now()
   const current = await getBlogSettings(db, userId)
+  const next: BlogSettings = {
+    title: patch.title ?? current.title,
+    description: patch.description ?? current.description,
+    publicTag: patch.publicTag ?? current.publicTag,
+    privateTag: patch.privateTag ?? current.privateTag,
+    momentsTag: patch.momentsTag ?? current.momentsTag,
+  }
   await db
     .prepare(
-      `INSERT INTO blog_settings
-        (user_id, title, description, password_hash, public_tag, private_tag, moments_public_tag, moments_private_tag, created_at, updated_at)
-        VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9)
-        ON CONFLICT(user_id) DO UPDATE SET
-          title = excluded.title,
-          description = excluded.description,
-          public_tag = excluded.public_tag,
-          private_tag = excluded.private_tag,
-          moments_public_tag = excluded.moments_public_tag,
-          moments_private_tag = excluded.moments_private_tag,
-          updated_at = excluded.updated_at`,
+      `INSERT INTO blog_settings (user_id, title, description, password_hash, settings_json, created_at, updated_at)
+        VALUES (?1, '', '', '', '{}', ?2, ?2)
+        ON CONFLICT(user_id) DO NOTHING`,
+    )
+    .bind(userId, now)
+    .run()
+  await db
+    .prepare(
+      `UPDATE blog_settings SET title = ?1, description = ?2, settings_json = ?3, updated_at = ?4
+        WHERE user_id = ?5`,
     )
     .bind(
+      next.title,
+      next.description,
+      JSON.stringify({ publicTag: next.publicTag, privateTag: next.privateTag, momentsTag: next.momentsTag }),
+      now,
       userId,
-      patch.title ?? current.title,
-      patch.description ?? current.description,
-      patch.publicTag ?? current.publicTag,
-      patch.privateTag ?? current.privateTag,
-      patch.momentsPublicTag ?? current.momentsPublicTag,
-      patch.momentsPrivateTag ?? current.momentsPrivateTag,
-      now,
-      now,
     )
     .run()
 }
 
 export async function setBlogPasswordHash(db: D1Database, userId: string, passwordHash: string): Promise<void> {
   const now = Date.now()
-  const current = await getBlogSettings(db, userId)
   await db
     .prepare(
-      `INSERT INTO blog_settings
-        (user_id, title, description, password_hash, public_tag, private_tag, moments_public_tag, moments_private_tag, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+      `INSERT INTO blog_settings (user_id, title, description, password_hash, settings_json, created_at, updated_at)
+        VALUES (?1, '', '', ?2, '{}', ?3, ?3)
         ON CONFLICT(user_id) DO UPDATE SET password_hash = excluded.password_hash, updated_at = excluded.updated_at`,
     )
-    .bind(userId, current.title, current.description, passwordHash, current.publicTag, current.privateTag, current.momentsPublicTag, current.momentsPrivateTag, now, now)
+    .bind(userId, passwordHash, now)
     .run()
 }
 
@@ -106,20 +131,14 @@ export async function trackAccountPasswordChange(
  */
 export async function getBlogSettings(db: D1Database, userId: string): Promise<BlogSettings> {
   const row = await db
-    .prepare(
-      `SELECT title, description, public_tag, private_tag, moments_public_tag, moments_private_tag
-         FROM blog_settings WHERE user_id = ?1`,
-    )
+    .prepare(`SELECT title, description, settings_json FROM blog_settings WHERE user_id = ?1`)
     .bind(userId)
     .first<BlogSettingsRow>()
   if (row) {
     return {
       title: row.title,
       description: row.description,
-      publicTag: row.public_tag,
-      privateTag: row.private_tag,
-      momentsPublicTag: row.moments_public_tag ?? MOMENT_PUBLIC_TAG,
-      momentsPrivateTag: row.moments_private_tag ?? MOMENT_PRIVATE_TAG,
+      ...parseTagConfig(row.settings_json),
     }
   }
   const [title, description, publicTag, privateTag] = await Promise.all([
@@ -133,7 +152,6 @@ export async function getBlogSettings(db: D1Database, userId: string): Promise<B
     description: description ?? '',
     publicTag: publicTag || BLOG_PUBLIC_TAG,
     privateTag: privateTag || BLOG_PRIVATE_TAG,
-    momentsPublicTag: MOMENT_PUBLIC_TAG,
-    momentsPrivateTag: MOMENT_PRIVATE_TAG,
+    momentsTag: MOMENTS_TAG,
   }
 }

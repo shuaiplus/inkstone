@@ -1,10 +1,10 @@
-import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENT_PRIVATE_TAG, MOMENT_PUBLIC_TAG, blogEntryOfTags } from '@shared/blog/tags'
+﻿import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG, blogEntryOfTags } from '@shared/blog/tags'
 import { getMeta, setMeta } from '../db/metadata'
 import { LEGACY_BLOG_SESSION_PREFIX } from './settings'
 import { resyncBlogPosts } from './publish'
 
 export const BLOG_SEED_MARKER = 'blog_seed:v14'
-export const BLOG_MOMENTS_RESEED_MARKER = 'blog_seed:moments-tags-v1'
+export const BLOG_MOMENTS_RESEED_MARKER = 'blog_seed:moments-tags-v3'
 
 const BLOG_PASSWORD_KEY = (userId: string): string => `blog_password_hash:${userId}`
 const BLOG_TITLE_KEY = (userId: string): string => `blog_title:${userId}`
@@ -46,18 +46,19 @@ async function seedUserSettings(db: D1Database, user: SeedUser): Promise<void> {
   await db
     .prepare(
       `INSERT OR IGNORE INTO blog_settings
-        (user_id, title, description, password_hash, public_tag, private_tag, moments_public_tag, moments_private_tag, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+        (user_id, title, description, password_hash, settings_json, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
     )
     .bind(
       user.id,
       title ?? '',
       description ?? '',
       customHash || user.password_hash,
-      publicTag || BLOG_PUBLIC_TAG,
-      privateTag || BLOG_PRIVATE_TAG,
-      MOMENT_PUBLIC_TAG,
-      MOMENT_PRIVATE_TAG,
+      JSON.stringify({
+        publicTag: publicTag || BLOG_PUBLIC_TAG,
+        privateTag: privateTag || BLOG_PRIVATE_TAG,
+        momentsTag: MOMENTS_TAG,
+      }),
       now,
       now,
     )
@@ -98,8 +99,7 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
   const config = {
     publicTag: publicTag || BLOG_PUBLIC_TAG,
     privateTag: privateTag || BLOG_PRIVATE_TAG,
-    momentsPublicTag: MOMENT_PUBLIC_TAG,
-    momentsPrivateTag: MOMENT_PRIVATE_TAG,
+    momentsTag: MOMENTS_TAG,
   }
   const { results: shares } = await db
     .prepare(
@@ -135,7 +135,7 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
 
 /**
  * Recomputes kind/visibility for existing blog_posts after the Moments model
- * switched from folders to tags. Idempotent via marker; reuses the same
+ * switched to orthogonal tags. Idempotent via marker; reuses the same
  * per-note sync as live writes so results match going forward.
  */
 export async function reseedMomentsClassification(db: D1Database): Promise<void> {

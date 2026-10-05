@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Folder, KeyRound, RefreshCw, Rss, Tag, Trash2 } from 'lucide-react'
 import { LIMITS } from '@shared/constants'
-import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENT_PRIVATE_TAG, MOMENT_PUBLIC_TAG } from '@shared/blog/tags'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG } from '@shared/blog/tags'
 import { blogApi } from '../../blog/api'
 import { Button } from '../../components/primitives'
 import { Input } from '../../components/form'
@@ -11,7 +11,7 @@ import { useSession } from '../../store/session'
 import { useUi } from '../../store/ui'
 import { t } from '../../lib/i18n'
 
-type BusyAction = 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsPublicTag' | 'momentsPrivateTag' | 'setPassword' | 'clearPassword' | null
+type BusyAction = 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsTag' | 'setPassword' | 'clearPassword' | null
 
 export function BlogSettings() {
   const username = useSession((s) => s.user?.username)
@@ -23,8 +23,7 @@ export function BlogSettings() {
   const [description, setDescription] = useState('')
   const [publicTag, setPublicTag] = useState(BLOG_PUBLIC_TAG)
   const [privateTag, setPrivateTag] = useState(BLOG_PRIVATE_TAG)
-  const [momentsPublicTag, setMomentsPublicTag] = useState(MOMENT_PUBLIC_TAG)
-  const [momentsPrivateTag, setMomentsPrivateTag] = useState(MOMENT_PRIVATE_TAG)
+  const [momentsTag, setMomentsTag] = useState(MOMENTS_TAG)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<BusyAction>(null)
   const mountedRef = useRef(true)
@@ -41,8 +40,7 @@ export function BlogSettings() {
         setHasCustomPassword(settings.hasCustomPassword)
         setPublicTag(settings.publicTag || BLOG_PUBLIC_TAG)
         setPrivateTag(settings.privateTag || BLOG_PRIVATE_TAG)
-        setMomentsPublicTag(settings.momentsPublicTag || MOMENT_PUBLIC_TAG)
-        setMomentsPrivateTag(settings.momentsPrivateTag || MOMENT_PRIVATE_TAG)
+        setMomentsTag(settings.momentsTag || MOMENTS_TAG)
       }
     } catch (error) {
       if (mountedRef.current) setLoadError(errorMessage(error))
@@ -135,26 +133,12 @@ export function BlogSettings() {
     }
   }
 
-  const saveMomentsPublicTag = async () => {
-    if (!begin('momentsPublicTag')) return
-    const next = momentsPublicTag.trim()
+  const saveMomentsTag = async () => {
+    if (!begin('momentsTag')) return
+    const next = momentsTag.trim()
     try {
-      await blogApi.updateSettings({ momentsPublicTag: next })
-      if (mountedRef.current) setMomentsPublicTag(next)
-      toast({ title: t('settings.blog_tag_saved'), tone: 'success' })
-    } catch (error) {
-      fail(error)
-    } finally {
-      finish()
-    }
-  }
-
-  const saveMomentsPrivateTag = async () => {
-    if (!begin('momentsPrivateTag')) return
-    const next = momentsPrivateTag.trim()
-    try {
-      await blogApi.updateSettings({ momentsPrivateTag: next })
-      if (mountedRef.current) setMomentsPrivateTag(next)
+      await blogApi.updateSettings({ momentsTag: next })
+      if (mountedRef.current) setMomentsTag(next)
       toast({ title: t('settings.blog_tag_saved'), tone: 'success' })
     } catch (error) {
       fail(error)
@@ -308,35 +292,20 @@ export function BlogSettings() {
         <div>
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
             <Folder size={12} />
-            <label>{t('settings.blog_moments_public_tag')}</label>
+            <label>{t('settings.blog_moments_tag')}</label>
           </div>
+          <p className="mb-1 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
+            {t('settings.blog_moments_tag_desc')}
+          </p>
           <div className="flex gap-2">
             <Input
-              value={momentsPublicTag}
+              value={momentsTag}
               maxLength={64}
-              placeholder={MOMENT_PUBLIC_TAG}
-              onChange={(e) => setMomentsPublicTag(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void saveMomentsPublicTag() }}
+              placeholder={MOMENTS_TAG}
+              onChange={(e) => setMomentsTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void saveMomentsTag() }}
             />
-            <Button size="sm" variant="secondary" loading={busy === 'momentsPublicTag'} disabled={busy !== null} onClick={() => void saveMomentsPublicTag()}>
-              {t('common.save')}
-            </Button>
-          </div>
-        </div>
-        <div>
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
-            <Folder size={12} />
-            <label>{t('settings.blog_moments_private_tag')}</label>
-          </div>
-          <div className="flex gap-2">
-            <Input
-              value={momentsPrivateTag}
-              maxLength={64}
-              placeholder={MOMENT_PRIVATE_TAG}
-              onChange={(e) => setMomentsPrivateTag(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void saveMomentsPrivateTag() }}
-            />
-            <Button size="sm" variant="secondary" loading={busy === 'momentsPrivateTag'} disabled={busy !== null} onClick={() => void saveMomentsPrivateTag()}>
+            <Button size="sm" variant="secondary" loading={busy === 'momentsTag'} disabled={busy !== null} onClick={() => void saveMomentsTag()}>
               {t('common.save')}
             </Button>
           </div>

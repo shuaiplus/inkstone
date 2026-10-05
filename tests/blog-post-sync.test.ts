@@ -38,11 +38,7 @@ function makeDb(handlers: Array<[key: string, (args: unknown[]) => Promise<{ all
 const SETTINGS_ROW = {
   title: '',
   description: '',
-  password_hash: 'h',
-  public_tag: 'blog-public',
-  private_tag: 'blog-private',
-  moments_public_tag: 'moment-public',
-  moments_private_tag: 'moment-private',
+  settings_json: '{"publicTag":"blog-public","privateTag":"blog-private","momentsTag":"moment"}',
 }
 
 function syncDb(overrides: { existingSlug?: string | null } = {}): ReturnType<typeof makeDb> {
@@ -77,21 +73,28 @@ describe('syncBlogPost', () => {
     expect(hasSql(sqls, 'DELETE FROM blog_posts')).toBe(true)
   })
 
-  it('marks kind as moment for the moment-public tag', async () => {
+  it('marks kind as moment for a public moment (moments + public tags)', async () => {
     const { db, args } = syncDb()
-    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['moment-public'])
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['moment', 'blog-public'])
     const insertArgs = args.find((a) => a.includes('public') || a.includes('moment'))
     expect(insertArgs).toBeDefined()
     expect(insertArgs).toContain('moment')
   })
 
-  it('marks a moment-private note as a private moment', async () => {
+  it('marks a private moment for moments + private tags', async () => {
     const { db, args } = syncDb()
-    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['moment-private'])
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['moment', 'blog-private'])
     const insertArgs = args.find((a) => a.includes('moment'))
     expect(insertArgs).toBeDefined()
     expect(insertArgs).toContain('private')
     expect(insertArgs).toContain('moment')
+  })
+
+  it('publishes nothing for a bare moments tag', async () => {
+    const { db, sqls } = syncDb()
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['moment'])
+    expect(hasSql(sqls, 'INSERT INTO blog_posts')).toBe(false)
+    expect(hasSql(sqls, 'DELETE FROM blog_posts')).toBe(true)
   })
 
   it('withdrawBlogPost deletes only the post row', async () => {

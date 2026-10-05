@@ -209,14 +209,14 @@ filesRoutes.get('/:id', async (c) => {
     const share = await c.env.DB.prepare(
       `SELECT s.slug, s.password_hash,
               (EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
-                        WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name IN (?4, ?5))) AS blog_private,
+                        WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name = ?4)) AS blog_private,
               s.user_id, n.content
          FROM shares s
           JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
          WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
            AND (s.expires_at IS NULL OR s.expires_at > ?3)`,
     )
-      .bind(shareSlug, row.user_id, Date.now(), settings.privateTag, settings.momentsPrivateTag)
+      .bind(shareSlug, row.user_id, Date.now(), settings.privateTag)
       .first<{
         slug: string
         password_hash: string | null

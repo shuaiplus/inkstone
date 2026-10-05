@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENT_PUBLIC_TAG, MOMENT_PRIVATE_TAG, blogTierOfTags, blogEntryOfTags, hiddenBlogTags } from '../src/shared/blog/tags'
+import { BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENTS_TAG, blogTierOfTags, blogEntryOfTags, hiddenBlogTags } from '../src/shared/blog/tags'
 
 describe('blog tier tags', () => {
   it('derives tier: none/public/private with private winning', () => {
@@ -15,31 +15,27 @@ describe('blog tier tags', () => {
     expect(blogTierOfTags(['my-private'], config)).toBe('private')
     expect(blogTierOfTags([BLOG_PUBLIC_TAG], config)).toBe('none')
   })
-  it('hiddenBlogTags returns the configured tags including moments', () => {
-    expect(hiddenBlogTags()).toEqual([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENT_PUBLIC_TAG, MOMENT_PRIVATE_TAG])
-    expect(hiddenBlogTags({ publicTag: 'p', privateTag: 'q', momentsPublicTag: 'mp', momentsPrivateTag: 'mq' })).toEqual(['p', 'q', 'mp', 'mq'])
+  it('hiddenBlogTags returns all three configured tags', () => {
+    expect(hiddenBlogTags()).toEqual([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENTS_TAG])
+    expect(hiddenBlogTags({ publicTag: 'p', privateTag: 'q', momentsTag: 'm' })).toEqual(['p', 'q', 'm'])
   })
 })
 
-describe('blog moment tags', () => {
-  it('resolves kind and tier from moment tags, moments winning over article tags', () => {
+describe('blog entry resolution (visibility x kind)', () => {
+  it('resolves kind from the moments tag, visibility from blog tags', () => {
     expect(blogEntryOfTags([])).toBeNull()
     expect(blogEntryOfTags(['x'])).toBeNull()
-    expect(blogEntryOfTags([MOMENT_PUBLIC_TAG])).toEqual({ tier: 'public', kind: 'moment' })
-    expect(blogEntryOfTags([MOMENT_PRIVATE_TAG])).toEqual({ tier: 'private', kind: 'moment' })
-    expect(blogEntryOfTags([MOMENT_PRIVATE_TAG, MOMENT_PUBLIC_TAG])).toEqual({ tier: 'private', kind: 'moment' })
-    expect(blogEntryOfTags([BLOG_PUBLIC_TAG, MOMENT_PUBLIC_TAG])).toEqual({ tier: 'public', kind: 'moment' })
     expect(blogEntryOfTags([BLOG_PUBLIC_TAG])).toEqual({ tier: 'public', kind: 'article' })
     expect(blogEntryOfTags([BLOG_PRIVATE_TAG])).toEqual({ tier: 'private', kind: 'article' })
+    expect(blogEntryOfTags([MOMENTS_TAG])).toBeNull()
+    expect(blogEntryOfTags([MOMENTS_TAG, BLOG_PUBLIC_TAG])).toEqual({ tier: 'public', kind: 'moment' })
+    expect(blogEntryOfTags([MOMENTS_TAG, BLOG_PRIVATE_TAG])).toEqual({ tier: 'private', kind: 'moment' })
+    expect(blogEntryOfTags([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG])).toEqual({ tier: 'private', kind: 'article' })
   })
-  it('respects custom moment tag names', () => {
-    const config = { publicTag: 'p', privateTag: 'q', momentsPublicTag: 'mp', momentsPrivateTag: 'mq' }
-    expect(blogEntryOfTags(['mp'], config)).toEqual({ tier: 'public', kind: 'moment' })
-    expect(blogEntryOfTags(['mq'], config)).toEqual({ tier: 'private', kind: 'moment' })
-    expect(blogEntryOfTags([MOMENT_PUBLIC_TAG], config)).toBeNull()
-  })
-  it('hiddenBlogTags includes the moment tags', () => {
-    expect(hiddenBlogTags()).toContain(MOMENT_PUBLIC_TAG)
-    expect(hiddenBlogTags()).toContain(MOMENT_PRIVATE_TAG)
+  it('respects custom tag names', () => {
+    const config = { publicTag: 'p', privateTag: 'q', momentsTag: 'm' }
+    expect(blogEntryOfTags(['m', 'p'], config)).toEqual({ tier: 'public', kind: 'moment' })
+    expect(blogEntryOfTags(['m', 'q'], config)).toEqual({ tier: 'private', kind: 'moment' })
+    expect(blogEntryOfTags([MOMENTS_TAG, 'p'], config)).toEqual({ tier: 'public', kind: 'article' })
   })
 })

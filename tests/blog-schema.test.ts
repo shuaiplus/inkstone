@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { SCHEMA_STATEMENTS } from '../src/worker/db/schema'
+import { SCHEMA_MIGRATIONS, SCHEMA_STATEMENTS } from '../src/worker/db/schema'
 
 const statements = SCHEMA_STATEMENTS.join('\n')
+const migrationSource = SCHEMA_MIGRATIONS.map((m) => m.statements.join('\n')).join('\n')
 
 describe('blog independent tables (migration 14)', () => {
-  it('creates blog_settings with a customizable moments folder', () => {
+  it('creates blog_settings with flexible JSON tag config', () => {
     expect(statements).toContain('CREATE TABLE IF NOT EXISTS blog_settings')
-    expect(statements).toContain('moments_folder')
+    expect(statements).toContain('settings_json')
+    expect(statements).not.toContain('public_tag')
   })
 
   it('creates blog_posts keyed by (user_id, note_id) with per-user slug', () => {
@@ -19,5 +21,13 @@ describe('blog independent tables (migration 14)', () => {
   it('creates blog_sessions for expiry cleanup', () => {
     expect(statements).toContain('CREATE TABLE IF NOT EXISTS blog_sessions')
     expect(statements).toContain('idx_blog_sessions_user')
+  })
+})
+
+describe('blog settings JSON (migration 16)', () => {
+  it('adds settings_json and drops the per-tag columns', () => {
+    expect(migrationSource).toContain('ADD COLUMN settings_json')
+    expect(migrationSource).toContain('DROP COLUMN public_tag')
+    expect(migrationSource).toContain('DROP COLUMN moments_folder')
   })
 })

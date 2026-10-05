@@ -16,7 +16,7 @@ import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie, BLOG_SESSION_COOKIE,
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
   setBlogDescription, getBlogDescription,
-  setBlogPublicTag, setBlogPrivateTag, setBlogMomentsPublicTag, setBlogMomentsPrivateTag,
+  setBlogPublicTag, setBlogPrivateTag, setBlogMomentsTag,
   getBlogTagConfig, getBlogAccent,
   clearBlogSession, deleteBlogSessionCookie,
 } from './auth'
@@ -41,8 +41,7 @@ blogRoutes.get('/settings', async (c) => {
     description: (await getBlogDescription(c.env.DB, userId)),
     publicTag: settings.publicTag,
     privateTag: settings.privateTag,
-    momentsPublicTag: settings.momentsPublicTag,
-    momentsPrivateTag: settings.momentsPrivateTag,
+    momentsTag: settings.momentsTag,
   })
 })
 
@@ -54,8 +53,7 @@ blogRoutes.put('/settings', async (c) => {
     description?: string | null
     publicTag?: string
     privateTag?: string
-    momentsPublicTag?: string
-    momentsPrivateTag?: string
+    momentsTag?: string
   }>(c, 4096)
   if (body.password !== undefined) {
     if (typeof body.password === 'string' && body.password.length > LIMITS.passwordMaxLength) {
@@ -77,20 +75,15 @@ blogRoutes.put('/settings', async (c) => {
     const tag = body.privateTag.trim()
     if (tag) await setBlogPrivateTag(c.env.DB, userId, tag)
   }
-  if (body.momentsPublicTag !== undefined) {
-    const tag = body.momentsPublicTag.trim()
-    if (tag) await setBlogMomentsPublicTag(c.env.DB, userId, tag)
-  }
-  if (body.momentsPrivateTag !== undefined) {
-    const tag = body.momentsPrivateTag.trim()
-    if (tag) await setBlogMomentsPrivateTag(c.env.DB, userId, tag)
+  if (body.momentsTag !== undefined) {
+    const tag = body.momentsTag.trim()
+    if (tag) await setBlogMomentsTag(c.env.DB, userId, tag)
   }
   const after = await getBlogSettings(c.env.DB, userId)
   if (
     before.publicTag !== after.publicTag ||
     before.privateTag !== after.privateTag ||
-    before.momentsPublicTag !== after.momentsPublicTag ||
-    before.momentsPrivateTag !== after.momentsPrivateTag
+    before.momentsTag !== after.momentsTag
   ) {
     await resyncBlogPosts(c.env.DB, userId)
   }

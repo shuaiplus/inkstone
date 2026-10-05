@@ -211,28 +211,36 @@ describe('blog note hooks', () => {
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('CREATE with the moment-public tag ensures a public moment post', async () => {
+  it('CREATE with moments + public tags ensures a public moment post', async () => {
     const db = makeDb({ accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, '/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: N1, content: '---\ntags:\n  - moment-public\n---\n# Hello\n' }),
+      body: JSON.stringify({ id: N1, content: '---\ntags:\n  - moment\n  - blog-public\n---\n# Hello\n' }),
     })
     expect(res.status).toBe(201)
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
     expect(db.hasSql('UPDATE blog_posts')).toBe(false)
   })
 
-  it('PATCH adding the moment-private tag ensures a private moment post', async () => {
+  it('PATCH adding moments + private tags ensures a private moment post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })], accountHash: 'acct-hash' })
-    const res = await patch(db, N1, '---\ntags:\n  - moment-private\n---\n# Secret\n')
+    const res = await patch(db, N1, '---\ntags:\n  - moment\n  - blog-private\n---\n# Secret\n')
     expect(res.status).toBe(200)
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('PATCH removing the moment tag withdraws the blog post', async () => {
-    const db = makeDb({ notes: [seedNote({ id: N1, content: '---\ntags:\n  - moment-public\n---\n# Hello\n' })], accountHash: 'acct-hash' })
+  it('PATCH removing the moments tag re-syncs the post as an article', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: '---\ntags:\n  - moment\n  - blog-public\n---\n# Hello\n' })], accountHash: 'acct-hash' })
+    const res = await patch(db, N1, TAGGED_CONTENT)
+    expect(res.status).toBe(200)
+    expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
+    expect(db.hasSql('DELETE FROM blog_posts')).toBe(false)
+  })
+
+  it('PATCH removing all blog tags withdraws the blog post', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: '---\ntags:\n  - moment\n  - blog-public\n---\n# Hello\n' })], accountHash: 'acct-hash' })
     const res = await patch(db, N1, '# Hello without tags\n')
     expect(res.status).toBe(200)
     expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)

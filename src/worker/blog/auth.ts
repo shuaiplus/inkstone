@@ -89,12 +89,8 @@ export async function setBlogPrivateTag(db: D1Database, userId: string, tag: str
   await updateBlogSettings(db, userId, { privateTag: tag })
 }
 
-export async function setBlogMomentsPublicTag(db: D1Database, userId: string, tag: string): Promise<void> {
-  await updateBlogSettings(db, userId, { momentsPublicTag: tag })
-}
-
-export async function setBlogMomentsPrivateTag(db: D1Database, userId: string, tag: string): Promise<void> {
-  await updateBlogSettings(db, userId, { momentsPrivateTag: tag })
+export async function setBlogMomentsTag(db: D1Database, userId: string, tag: string): Promise<void> {
+  await updateBlogSettings(db, userId, { momentsTag: tag })
 }
 
 export async function getBlogTagConfig(db: D1Database, userId: string): Promise<BlogTagConfig> {
@@ -102,8 +98,7 @@ export async function getBlogTagConfig(db: D1Database, userId: string): Promise<
   return {
     publicTag: settings.publicTag,
     privateTag: settings.privateTag,
-    momentsPublicTag: settings.momentsPublicTag,
-    momentsPrivateTag: settings.momentsPrivateTag,
+    momentsTag: settings.momentsTag,
   }
 }
 

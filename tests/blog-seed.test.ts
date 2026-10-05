@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import { reseedMomentsClassification, seedBlogTables } from '../src/worker/blog/seed'
 
 interface MockRow {
@@ -66,7 +66,7 @@ function seedDb(overrides: { meta?: Record<string, string>; users?: MockRow[]; s
     ['SELECT key, value FROM app_meta', async () => ({ all: overrides.sessions ?? [] })],
     ['FROM app_meta', async (args) => {
       const key = args[0] as string
-      if (key === 'blog_seed:v14' || key === 'blog_seed:moments-tags-v1') return { first: null }
+      if (key === 'blog_seed:v14' || key === 'blog_seed:moments-tags-v3') return { first: null }
       const value = overrides.meta?.[key]
       return { first: value !== undefined ? { value } : null }
     }],
@@ -106,10 +106,10 @@ describe('seedBlogTables', () => {
     expect(hasSql(db, 'n.deleted_at IS NULL')).toBe(true)
   })
 
-  it('classifies moments purely by tag', async () => {
+  it('classifies moments via moments + visibility tags', async () => {
     const { db } = seedDb({
       shares: [{ slug: 'm1', note_id: 'n1', created_at: 1000 }],
-      tagNames: ['moment-private'],
+      tagNames: ['moment', 'blog-private'],
     })
     await seedBlogTables(db as unknown as D1Database)
     const inserts = db.preparedArgs.filter((args) => args[2] === 'm1')
@@ -140,12 +140,12 @@ describe('seedBlogTables', () => {
 describe('reseedMomentsClassification', () => {
   it('recomputes kinds from tags and marks completion', async () => {
     const { db } = seedDb({
-      resyncNotes: [{ id: 'n1', tag_names: 'moment-public' }],
-      tagNames: ['moment-public'],
+      resyncNotes: [{ id: 'n1', tag_names: `moment${String.fromCharCode(1)}blog-public` }],
+      tagNames: ['moment', 'blog-public'],
     })
     await reseedMomentsClassification(db as unknown as D1Database)
     expect(hasSql(db, 'INSERT INTO blog_posts')).toBe(true)
-    const markers = db.preparedArgs.filter((args) => args[0] === 'blog_seed:moments-tags-v1' && args[1] === 'done')
+    const markers = db.preparedArgs.filter((args) => args[0] === 'blog_seed:moments-tags-v3' && args[1] === 'done')
     expect(markers.length).toBe(1)
   })
 
@@ -153,7 +153,7 @@ describe('reseedMomentsClassification', () => {
     const runs: string[] = []
     const db = makeDb([
       ['FROM app_meta', async (args) => ({
-        first: args[0] === 'blog_seed:moments-tags-v1' ? { value: 'done' } : null,
+        first: args[0] === 'blog_seed:moments-tags-v3' ? { value: 'done' } : null,
       })],
     ], runs)
     await reseedMomentsClassification(db as unknown as D1Database)
