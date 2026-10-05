@@ -164,6 +164,7 @@ function privatePostDetail() {
     created_at: 1700000000000,
     updated_at: 1700000000000,
     slug: 'private-post',
+    visibility: 'private',
     tag_names: 'blog-private',
     content: 'hello',
   }
@@ -236,7 +237,7 @@ describe('blog routes', () => {
     const res = await app.request('/alice/posts', {}, env(db))
     expect(res.status).toBe(200)
     const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ? OFFSET ?'))
-    expect(postsSql).toContain('t2.name = ?')
+    expect(postsSql).toContain("bp.visibility = 'public'")
   })
 
   it('/meta includes the owner appearance accent', async () => {
@@ -271,7 +272,7 @@ describe('blog routes', () => {
     )
     expect(res.status).toBe(200)
     const postsSql = db.preparedSqls.find((s) => s.includes('LIMIT ? OFFSET ?'))
-    expect(postsSql).toContain('IN (?, ?)')
+    expect(postsSql).toContain("bp.visibility IN ('public', 'private')")
   })
 
   it('returns 200 for a protected blog with a valid session cookie', async () => {

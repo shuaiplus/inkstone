@@ -8,11 +8,9 @@ import type {
   BlogTagPost,
   BlogTimelineResponse,
 } from '@shared/blog/types'
-import type { BlogTagConfig } from '@shared/blog/tags'
-import { firstImageSrc, parseFrontMatter } from '@shared/markdown-utils'
+import { extractAttachmentIds, firstImageSrc, parseFrontMatter } from '@shared/markdown-utils'
 import { getMeta } from '../db/metadata'
 import { splitTags } from '../db/rows'
-import { MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
 
 function frontMatterCreated(content: string | null | undefined): number | null {
   if (!content) return null
@@ -36,43 +34,14 @@ const TAG_SUBQUERY = `(SELECT GROUP_CONCAT(t.name, char(1)) FROM note_tags nt
      JOIN tags t ON t.id = nt.tag_id
     WHERE nt.note_id = n.id AND t.user_id = n.user_id) AS tag_names`
 
-const SHARE_POST_COLUMNS = `s.note_id AS id, n.title, n.excerpt, s.created_at, n.updated_at, s.slug, n.content, ${TAG_SUBQUERY}`
+const BLOG_POST_COLUMNS = `bp.note_id AS id, n.title, n.excerpt, bp.published_at AS created_at, n.updated_at, bp.slug, bp.visibility, n.content, ${TAG_SUBQUERY}`
 
-const SHARE_POST_JOIN = ` FROM shares s JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id`
+const BLOG_POST_JOIN = `FROM blog_posts bp JOIN notes n ON n.id = bp.note_id AND n.user_id = bp.user_id`
 
-function tierFilter(tier: 'public' | 'all'): string {
-  return `AND EXISTS (SELECT 1 FROM note_tags nt2 JOIN tags t2 ON t2.id = nt2.tag_id
-                WHERE nt2.note_id = n.id AND t2.user_id = n.user_id AND t2.name ${
-                  tier === 'public' ? '= ?' : 'IN (?, ?)'
-                })`
-}
+const PIN_ORDER = `bp.is_pinned DESC, COALESCE(bp.pinned_at, bp.published_at) DESC, bp.published_at DESC, bp.note_id DESC`
 
-function tierBinds(tier: 'public' | 'all', config: BlogTagConfig): string[] {
-  if (tier === 'public') return [config.publicTag]
-  return [config.publicTag, config.privateTag]
-}
-
-const excludeMomentsClause = `AND NOT EXISTS (SELECT 1 FROM folders f2 WHERE f2.id = n.folder_id AND f2.name = '${MOMENTS_FOLDER_NAME}' AND f2.parent_id IS NULL AND f2.deleted_at IS NULL)`
-
-const momentClause = `EXISTS (SELECT 1 FROM folders f2 WHERE f2.id = n.folder_id AND f2.name = '${MOMENTS_FOLDER_NAME}' AND f2.parent_id IS NULL AND f2.deleted_at IS NULL)`
-
-/**
- * SQL + ordered binds that scope blog content to notes the visitor may see:
- * - articles: notes carrying the blog-public/blog-private tag (excluding the Moments folder)
- * - moments: notes in the root Moments folder (public tier also excludes blog-private moments)
- */
-function blogScopeSql(tier: 'public' | 'all', config: BlogTagConfig): { sql: string; binds: string[] } {
-  const articleBinds = tier === 'public' ? [config.publicTag] : [config.publicTag, config.privateTag]
-  const article = `(${tierFilter(tier).replace(/^AND /, '')} AND NOT ${momentClause})`
-  if (tier === 'all') {
-    return { sql: `(${article} OR ${momentClause})`, binds: articleBinds }
-  }
-  const privateExclude = `AND NOT EXISTS (SELECT 1 FROM note_tags nt3 JOIN tags t3 ON t3.id = nt3.tag_id
-                    WHERE nt3.note_id = n.id AND t3.user_id = n.user_id AND t3.name = ?)`
-  return {
-    sql: `(${article} OR (${momentClause} ${privateExclude}))`,
-    binds: [...articleBinds, config.privateTag],
-  }
+function visibilityClause(tier: 'public' | 'all'): string {
+  return tier === 'public' ? `bp.visibility = 'public'` : `bp.visibility IN ('public', 'private')`
 }
 
 interface BlogPostRow {
@@ -82,6 +51,7 @@ interface BlogPostRow {
   created_at: number
   updated_at: number
   slug: string
+  visibility: 'public' | 'private'
   content: string
   tag_names: string | null
 }
@@ -94,6 +64,7 @@ function toBlogPostSummary(row: BlogPostRow): BlogPostSummary {
     created_at: frontMatterCreated(row.content) ?? row.created_at,
     updated_at: row.updated_at,
     slug: row.slug,
+    visibility: row.visibility,
     tags: splitTags(row.tag_names),
     cover: firstImageSrc(row.content),
   }
@@ -118,24 +89,48 @@ export async function hasBlogPassword(db: D1Database, userId: string): Promise<b
   return Boolean(await getMeta(db, `blog_password_hash:${userId}`))
 }
 
+/**
+ * Resolves a `?share=<slug>` token against blog posts (client appends the
+ * post slug to same-origin /api/files URLs). Public posts are free;
+ * private posts require a valid blog session.
+ */
+export async function checkBlogFileAccess(
+  db: D1Database,
+  slug: string,
+  attachmentId: string,
+  sessionValid: boolean,
+): Promise<{ allowed: boolean; userId: string | null }> {
+  const row = await db
+    .prepare(
+      `SELECT bp.user_id, bp.visibility, n.content ${BLOG_POST_JOIN}
+        WHERE bp.slug = ?1 AND n.deleted_at IS NULL`,
+    )
+    .bind(slug)
+    .first<{ user_id: string; visibility: string; content: string }>()
+  if (!row) return { allowed: false, userId: null }
+  if (!extractAttachmentIds(row.content).includes(attachmentId)) {
+    return { allowed: false, userId: null }
+  }
+  if (row.visibility === 'public') return { allowed: true, userId: row.user_id }
+  return { allowed: sessionValid, userId: row.user_id }
+}
+
 export async function listBlogPosts(
   db: D1Database,
   userId: string,
   tier: 'public' | 'all',
   page: number,
   limit: number,
-  config: BlogTagConfig,
 ): Promise<BlogPostsResponse> {
-  const now = Date.now()
   const offset = (page - 1) * limit
-  const where = `s.user_id = ? ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) ${excludeMomentsClause}`
+  const where = `bp.user_id = ? AND ${visibilityClause(tier)} AND bp.kind = 'article' AND n.deleted_at IS NULL`
   const { results } = await db
-    .prepare(`SELECT ${SHARE_POST_COLUMNS}${SHARE_POST_JOIN} WHERE ${where} ORDER BY s.created_at DESC LIMIT ? OFFSET ?`)
-    .bind(userId, ...tierBinds(tier, config), now, limit, offset)
+    .prepare(`SELECT ${BLOG_POST_COLUMNS} ${BLOG_POST_JOIN} WHERE ${where} ORDER BY ${PIN_ORDER} LIMIT ? OFFSET ?`)
+    .bind(userId, limit, offset)
     .all<BlogPostRow>()
   const count = await db
-    .prepare(`SELECT COUNT(*) AS count${SHARE_POST_JOIN} WHERE ${where}`)
-    .bind(userId, ...tierBinds(tier, config), now)
+    .prepare(`SELECT COUNT(*) AS count ${BLOG_POST_JOIN} WHERE ${where}`)
+    .bind(userId)
     .first<{ count: number }>()
   const posts = results.map(toBlogPostSummary)
   const total = count?.count ?? 0
@@ -147,16 +142,14 @@ export async function getBlogPost(
   userId: string,
   slug: string,
   tier: 'public' | 'all',
-  config: BlogTagConfig,
 ): Promise<BlogPostDetail | null> {
-  const now = Date.now()
   const row = await db
     .prepare(
-      `SELECT ${SHARE_POST_COLUMNS}${SHARE_POST_JOIN}
-        WHERE s.user_id = ? ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) AND s.slug = ?
+      `SELECT ${BLOG_POST_COLUMNS} ${BLOG_POST_JOIN}
+        WHERE bp.user_id = ? AND ${visibilityClause(tier)} AND n.deleted_at IS NULL AND bp.slug = ?
         LIMIT 1`,
     )
-    .bind(userId, ...tierBinds(tier, config), now, slug)
+    .bind(userId, slug)
     .first<BlogPostRow>()
   if (!row) return null
   return { ...toBlogPostSummary(row), content: row.content, previous: null, next: null }
@@ -168,23 +161,21 @@ export async function getAdjacentPosts(
   tier: 'public' | 'all',
   createdAt: number,
   noteId: string,
-  config: BlogTagConfig,
 ): Promise<{ previous: AdjacentPost | null; next: AdjacentPost | null }> {
-  const now = Date.now()
-  const base = `SELECT n.title, s.slug${SHARE_POST_JOIN} WHERE s.user_id = ? ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) ${excludeMomentsClause}`
+  const base = `SELECT n.title, bp.slug ${BLOG_POST_JOIN} WHERE bp.user_id = ? AND ${visibilityClause(tier)} AND n.deleted_at IS NULL AND bp.kind = 'article'`
   const previous = await db
     .prepare(
-      `${base} AND (s.created_at < ? OR (s.created_at = ? AND s.note_id < ?))
-        ORDER BY s.created_at DESC, s.note_id DESC LIMIT 1`,
+      `${base} AND (bp.published_at < ? OR (bp.published_at = ? AND bp.note_id < ?))
+        ORDER BY bp.published_at DESC, bp.note_id DESC LIMIT 1`,
     )
-    .bind(userId, ...tierBinds(tier, config), now, createdAt, createdAt, noteId)
+    .bind(userId, createdAt, createdAt, noteId)
     .first<{ title: string; slug: string }>()
   const next = await db
     .prepare(
-      `${base} AND (s.created_at > ? OR (s.created_at = ? AND s.note_id > ?))
-        ORDER BY s.created_at ASC, s.note_id ASC LIMIT 1`,
+      `${base} AND (bp.published_at > ? OR (bp.published_at = ? AND bp.note_id > ?))
+        ORDER BY bp.published_at ASC, bp.note_id ASC LIMIT 1`,
     )
-    .bind(userId, ...tierBinds(tier, config), now, createdAt, createdAt, noteId)
+    .bind(userId, createdAt, createdAt, noteId)
     .first<{ title: string; slug: string }>()
   return { previous: previous ?? null, next: next ?? null }
 }
@@ -195,38 +186,21 @@ export async function listBlogMoments(
   tier: 'public' | 'all',
   page: number,
   limit: number,
-  config: BlogTagConfig,
 ): Promise<BlogMomentsResponse> {
-  const now = Date.now()
   const offset = (page - 1) * limit
-  const privateExclude = tier === 'public'
-    ? `AND NOT EXISTS (SELECT 1 FROM note_tags nt2 JOIN tags t2 ON t2.id = nt2.tag_id
-                    WHERE nt2.note_id = n.id AND t2.user_id = n.user_id AND t2.name = ?)`
-    : ''
-  const from = `FROM notes n
-     JOIN folders f ON f.id = n.folder_id AND f.name = ? AND f.parent_id IS NULL AND f.deleted_at IS NULL
-     JOIN shares s ON s.note_id = n.id AND s.user_id = n.user_id
-       AND (s.expires_at IS NULL OR s.expires_at > ?)
-     ${privateExclude}
-    WHERE n.user_id = ? AND n.deleted_at IS NULL`
-  const bindParams = tier === 'public'
-    ? [MOMENTS_FOLDER_NAME, now, config.privateTag, userId, limit, offset]
-    : [MOMENTS_FOLDER_NAME, now, userId, limit, offset]
+  const from = `${BLOG_POST_JOIN} WHERE bp.user_id = ? AND bp.kind = 'moment' AND ${visibilityClause(tier)} AND n.deleted_at IS NULL`
   const { results } = await db
     .prepare(
-      `SELECT n.id, n.content, n.created_at, s.slug AS slug, ${TAG_SUBQUERY}
+      `SELECT n.id, n.content, n.created_at, bp.slug AS slug, ${TAG_SUBQUERY}
         ${from}
         ORDER BY n.created_at DESC, n.id DESC
         LIMIT ? OFFSET ?`,
     )
-    .bind(...bindParams)
+    .bind(userId, limit, offset)
     .all<{ id: string; content: string; created_at: number; slug: string; tag_names: string | null }>()
-  const countBindParams = tier === 'public'
-    ? [MOMENTS_FOLDER_NAME, now, config.privateTag, userId]
-    : [MOMENTS_FOLDER_NAME, now, userId]
   const count = await db
     .prepare(`SELECT COUNT(*) AS count ${from}`)
-    .bind(...countBindParams)
+    .bind(userId)
     .first<{ count: number }>()
   const total = count?.count ?? 0
   return {
@@ -248,24 +222,22 @@ export async function listBlogTimeline(
   tier: 'public' | 'all',
   page: number,
   limit: number,
-  config: BlogTagConfig,
 ): Promise<BlogTimelineResponse> {
-  const now = Date.now()
   const offset = (page - 1) * limit
-  const where = `s.user_id = ? ${tierFilter(tier)} AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) ${excludeMomentsClause}`
+  const where = `bp.user_id = ? AND ${visibilityClause(tier)} AND bp.kind = 'article' AND n.deleted_at IS NULL`
   const { results } = await db
     .prepare(
-      `SELECT s.note_id AS id, n.title, s.created_at, s.slug AS slug, n.content AS content
-       ${SHARE_POST_JOIN}
+      `SELECT bp.note_id AS id, n.title, bp.published_at AS created_at, bp.slug AS slug, n.content AS content
+       ${BLOG_POST_JOIN}
         WHERE ${where}
-        ORDER BY s.created_at DESC, s.note_id DESC
+        ORDER BY bp.published_at DESC, bp.note_id DESC
         LIMIT ? OFFSET ?`,
     )
-    .bind(userId, ...tierBinds(tier, config), now, limit, offset)
+    .bind(userId, limit, offset)
     .all<{ id: string; title: string; created_at: number; slug: string; content: string }>()
   const count = await db
-    .prepare(`SELECT COUNT(*) AS count${SHARE_POST_JOIN} WHERE ${where}`)
-    .bind(userId, ...tierBinds(tier, config), now)
+    .prepare(`SELECT COUNT(*) AS count ${BLOG_POST_JOIN} WHERE ${where}`)
+    .bind(userId)
     .first<{ count: number }>()
   const total = count?.count ?? 0
   return {
@@ -288,16 +260,12 @@ export async function listBlogTags(
   db: D1Database,
   userId: string,
   tier: 'public' | 'all',
-  config: BlogTagConfig,
 ): Promise<BlogTag[]> {
-  const now = Date.now()
-  const scope = blogScopeSql(tier, config)
-  const where = `s.user_id = ? AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) AND ${scope.sql}`
+  const where = `bp.user_id = ? AND ${visibilityClause(tier)} AND n.deleted_at IS NULL`
   const { results } = await db
     .prepare(
       `SELECT t.name, COUNT(*) AS count
-         FROM shares s
-         JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
+         ${BLOG_POST_JOIN}
          JOIN note_tags nt ON nt.note_id = n.id
          JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
         WHERE ${where}
@@ -305,7 +273,7 @@ export async function listBlogTags(
        HAVING count > 0
         ORDER BY count DESC, t.name ASC`,
     )
-    .bind(userId, now, ...scope.binds)
+    .bind(userId)
     .all<{ name: string; count: number }>()
   return results
 }
@@ -319,23 +287,19 @@ export async function listPostsByTag(
   userId: string,
   tagName: string,
   tier: 'public' | 'all',
-  config: BlogTagConfig,
 ): Promise<BlogTagPost[]> {
-  const now = Date.now()
-  const scope = blogScopeSql(tier, config)
-  const where = `s.user_id = ? AND n.deleted_at IS NULL AND (s.expires_at IS NULL OR s.expires_at > ?) AND ${scope.sql}`
+  const where = `bp.user_id = ? AND ${visibilityClause(tier)} AND n.deleted_at IS NULL`
   const { results } = await db
     .prepare(
-      `SELECT ${SHARE_POST_COLUMNS},
-              CASE WHEN ${momentClause} THEN 1 ELSE 0 END AS is_moment
-         FROM shares s
-         JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
+      `SELECT ${BLOG_POST_COLUMNS},
+              CASE WHEN bp.kind = 'moment' THEN 1 ELSE 0 END AS is_moment
+         ${BLOG_POST_JOIN}
          JOIN note_tags nt ON nt.note_id = n.id
          JOIN tags t ON t.id = nt.tag_id AND t.user_id = n.user_id
         WHERE ${where} AND t.name = ? COLLATE NOCASE
-        ORDER BY s.created_at DESC`,
+        ORDER BY bp.published_at DESC`,
     )
-    .bind(userId, now, ...scope.binds, tagName)
+    .bind(userId, tagName)
     .all<BlogTagRow>()
   return results.map((row) => {
     const base = {
@@ -352,6 +316,7 @@ export async function listPostsByTag(
       title: row.title,
       excerpt: row.excerpt,
       updated_at: row.updated_at,
+      visibility: row.visibility,
       cover: firstImageSrc(row.content),
       ...base,
     }

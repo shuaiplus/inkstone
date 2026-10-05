@@ -17,6 +17,7 @@ import {
 } from '../attachments/keys'
 import { persistAttachmentWithinQuota } from '../attachments/storage'
 import { BLOG_SESSION_COOKIE, getBlogPrivateTag, validateBlogSession } from '../blog/auth'
+import { checkBlogFileAccess } from '../blog/queries'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { isValidId, isValidSlug, newId } from '../lib/id'
@@ -237,6 +238,17 @@ filesRoutes.get('/:id', async (c) => {
           ))) ||
           (share.blog_private === 1 && (await blogFileAccess(c, share.user_id)))),
     )
+    if (!share) {
+      // New-style blog slug (blog_posts.slug, no shares row): public posts
+      // are free, private posts need a blog session.
+      const blog = await checkBlogFileAccess(
+        c.env.DB,
+        shareSlug,
+        row.id,
+        await blogFileAccess(c, row.user_id),
+      )
+      allowed = blog.allowed
+    }
   }
   if (!allowed) throw ApiError.unauthenticated('You do not have access to this attachment')
 

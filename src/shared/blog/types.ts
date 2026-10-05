@@ -6,6 +6,7 @@ export interface BlogPostSummary {
   updated_at: number
   tags: string[]
   slug: string
+  visibility: 'public' | 'private'
   cover: string | null
 }
 

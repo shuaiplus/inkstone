@@ -161,50 +161,44 @@ blogRoutes.post('/:username/logout', async (c) => {
 
 blogRoutes.get('/:username/posts', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const config = await getBlogTagConfig(c.env.DB, userId)
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)
   const limit = Math.min(50, Math.max(1, parseInt(c.req.query('limit') ?? '10', 10) || 10))
-  return c.json(await listBlogPosts(c.env.DB, userId, requestTier(c), page, limit, config))
+  return c.json(await listBlogPosts(c.env.DB, userId, requestTier(c), page, limit))
 })
 
 blogRoutes.get('/:username/posts/:slug', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const config = await getBlogTagConfig(c.env.DB, userId)
-  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), 'all', config)
+  const post = await getBlogPost(c.env.DB, userId, c.req.param('slug'), 'all')
   if (!post) return c.json({ error: { code: 'not_found', message: 'Post not found' } }, 404)
-  if (post.tags.includes(config.privateTag) && !c.get('blogAuthed')) {
+  if (post.visibility === 'private' && !c.get('blogAuthed')) {
     return c.json({ error: { code: 'blog_auth_required', message: 'Blog authentication required' } }, 401)
   }
-  const adjacent = await getAdjacentPosts(c.env.DB, userId, requestTier(c), post.created_at, post.id, config)
+  const adjacent = await getAdjacentPosts(c.env.DB, userId, requestTier(c), post.created_at, post.id)
   return c.json({ ...post, previous: adjacent.previous, next: adjacent.next })
 })
 
 blogRoutes.get('/:username/moments', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const config = await getBlogTagConfig(c.env.DB, userId)
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') ?? '20', 10) || 20))
-  return c.json(await listBlogMoments(c.env.DB, userId, requestTier(c), page, limit, config))
+  return c.json(await listBlogMoments(c.env.DB, userId, requestTier(c), page, limit))
 })
 
 blogRoutes.get('/:username/timeline', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const config = await getBlogTagConfig(c.env.DB, userId)
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1)
   const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') ?? '20', 10) || 20))
-  return c.json(await listBlogTimeline(c.env.DB, userId, requestTier(c), page, limit, config))
+  return c.json(await listBlogTimeline(c.env.DB, userId, requestTier(c), page, limit))
 })
 
 blogRoutes.get('/:username/tags', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const config = await getBlogTagConfig(c.env.DB, userId)
-  const tags = await listBlogTags(c.env.DB, userId, requestTier(c), config)
+  const tags = await listBlogTags(c.env.DB, userId, requestTier(c))
   return c.json({ tags })
 })
 
 blogRoutes.get('/:username/tags/:name', async (c) => {
   const userId = c.get('blogOwnerId')!
-  const config = await getBlogTagConfig(c.env.DB, userId)
-  const posts = await listPostsByTag(c.env.DB, userId, c.req.param('name'), requestTier(c), config)
+  const posts = await listPostsByTag(c.env.DB, userId, c.req.param('name'), requestTier(c))
   return c.json({ name: c.req.param('name'), posts })
 })
