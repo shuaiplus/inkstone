@@ -44,7 +44,8 @@ export interface BlogSettings {
   description: string | null
   publicTag: string
   privateTag: string
-  momentsFolder: string
+  momentsPublicTag: string
+  momentsPrivateTag: string
 }
 
 export const blogApi = {
@@ -69,7 +70,7 @@ export const blogApi = {
     blogFetch<{ name: string; posts: BlogTagPost[] }>(`/${encodeURIComponent(username)}/tags/${encodeURIComponent(name)}`),
   settings: () =>
     blogFetch<BlogSettings>('/settings'),
-  updateSettings: (body: { password?: string | null; title?: string; description?: string | null; publicTag?: string; privateTag?: string; momentsFolder?: string }) =>
+  updateSettings: (body: { password?: string | null; title?: string; description?: string | null; publicTag?: string; privateTag?: string; momentsPublicTag?: string; momentsPrivateTag?: string }) =>
     blogFetch<{ ok: true }>('/settings', { method: 'PUT', body: JSON.stringify(body) }),
   togglePin: (noteId: string) =>
     blogFetch<{ is_pinned: number }>(`/posts/${encodeURIComponent(noteId)}/pin`, { method: 'PUT' }),

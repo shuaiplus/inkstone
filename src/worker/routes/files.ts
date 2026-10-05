@@ -1,6 +1,5 @@
 import { Hono, type Context } from 'hono'
 import { getCookie } from 'hono/cookie'
-import { MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
 import { LIMITS } from '@shared/constants'
 import { extractAttachmentIds } from '@shared/markdown-utils'
 import type { Attachment } from '@shared/types'
@@ -16,8 +15,9 @@ import {
   type AttachmentObjectStorage,
 } from '../attachments/keys'
 import { persistAttachmentWithinQuota } from '../attachments/storage'
-import { BLOG_SESSION_COOKIE, getBlogPrivateTag, validateBlogSession } from '../blog/auth'
+import { BLOG_SESSION_COOKIE, validateBlogSession } from '../blog/auth'
 import { checkBlogFileAccess } from '../blog/queries'
+import { getBlogSettings } from '../blog/settings'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { isValidId, isValidSlug, newId } from '../lib/id'
@@ -205,20 +205,18 @@ filesRoutes.get('/:id', async (c) => {
   const userId = c.get('userId')
   let allowed = Boolean(userId && userId === row.user_id)
   if (!allowed && isValidSlug(shareSlug)) {
-    const privateTag = await getBlogPrivateTag(c.env.DB, row.user_id)
+    const settings = await getBlogSettings(c.env.DB, row.user_id)
     const share = await c.env.DB.prepare(
       `SELECT s.slug, s.password_hash,
               (EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
-                        WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name = ?4)
-                OR EXISTS (SELECT 1 FROM folders f WHERE f.id = n.folder_id
-                            AND f.name = ?5 AND f.parent_id IS NULL AND f.deleted_at IS NULL)) AS blog_private,
+                        WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name IN (?4, ?5))) AS blog_private,
               s.user_id, n.content
          FROM shares s
           JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
          WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
            AND (s.expires_at IS NULL OR s.expires_at > ?3)`,
     )
-      .bind(shareSlug, row.user_id, Date.now(), privateTag, MOMENTS_FOLDER_NAME)
+      .bind(shareSlug, row.user_id, Date.now(), settings.privateTag, settings.momentsPrivateTag)
       .first<{
         slug: string
         password_hash: string | null

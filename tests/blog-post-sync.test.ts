@@ -41,7 +41,8 @@ const SETTINGS_ROW = {
   password_hash: 'h',
   public_tag: 'blog-public',
   private_tag: 'blog-private',
-  moments_folder: 'Moments',
+  moments_public_tag: 'moment-public',
+  moments_private_tag: 'moment-private',
 }
 
 function syncDb(overrides: { existingSlug?: string | null } = {}): ReturnType<typeof makeDb> {
@@ -56,14 +57,14 @@ const hasSql = (sqls: string[], fragment: string): boolean => sqls.some((sql) =>
 describe('syncBlogPost', () => {
   it('writes a public post row instead of a share', async () => {
     const { db, sqls } = syncDb()
-    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-public'], { inMoments: false })
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-public'])
     expect(hasSql(sqls, 'INSERT INTO blog_posts')).toBe(true)
     expect(hasSql(sqls, 'INTO shares')).toBe(false)
   })
 
   it('freezes slug and published_at on re-sync, updating visibility only', async () => {
     const { db, sqls, args } = syncDb({ existingSlug: 'keep-me' })
-    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-private'], { inMoments: false })
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-private'])
     expect(hasSql(sqls, 'INSERT INTO blog_posts')).toBe(false)
     const update = sqls.findIndex((sql) => sql.includes('UPDATE blog_posts'))
     expect(update).toBeGreaterThan(-1)
@@ -72,15 +73,24 @@ describe('syncBlogPost', () => {
 
   it('withdraws the post row when no blog tier matches', async () => {
     const { db, sqls } = syncDb()
-    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['random'], { inMoments: false })
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['random'])
     expect(hasSql(sqls, 'DELETE FROM blog_posts')).toBe(true)
   })
 
-  it('marks kind as moment inside the moments folder', async () => {
+  it('marks kind as moment for the moment-public tag', async () => {
     const { db, args } = syncDb()
-    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', [], { inMoments: true })
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['moment-public'])
     const insertArgs = args.find((a) => a.includes('public') || a.includes('moment'))
     expect(insertArgs).toBeDefined()
+    expect(insertArgs).toContain('moment')
+  })
+
+  it('marks a moment-private note as a private moment', async () => {
+    const { db, args } = syncDb()
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['moment-private'])
+    const insertArgs = args.find((a) => a.includes('moment'))
+    expect(insertArgs).toBeDefined()
+    expect(insertArgs).toContain('private')
     expect(insertArgs).toContain('moment')
   })
 
@@ -119,7 +129,7 @@ describe('syncBlogPost', () => {
         }
       },
     }
-    await syncBlogPost(flaky as unknown as D1Database, 'u1', 'n1', ['blog-public'], { inMoments: false })
+    await syncBlogPost(flaky as unknown as D1Database, 'u1', 'n1', ['blog-public'])
     expect(inserts).toBe(2)
     const failing = {
       prepare() {
@@ -140,6 +150,6 @@ describe('syncBlogPost', () => {
         }
       },
     }
-    await expect(syncBlogPost(failing as unknown as D1Database, 'u1', 'n1', ['blog-public'], { inMoments: false })).rejects.toThrow('boom')
+    await expect(syncBlogPost(failing as unknown as D1Database, 'u1', 'n1', ['blog-public'])).rejects.toThrow('boom')
   })
 })

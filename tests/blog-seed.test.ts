@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { seedBlogTables } from '../src/worker/blog/seed'
+import { reseedMomentsClassification, seedBlogTables } from '../src/worker/blog/seed'
 
 interface MockRow {
   [key: string]: unknown
@@ -60,20 +60,20 @@ function makeDb(
 const hasSql = (db: MockDb, fragment: string): boolean =>
   db.preparedSqls.some((sql) => sql.includes(fragment))
 
-function seedDb(overrides: { meta?: Record<string, string>; users?: MockRow[]; shares?: MockRow[]; tagNames?: string[]; folderName?: string | null; sessions?: MockRow[] }): { db: MockDb; runs: string[] } {
+function seedDb(overrides: { meta?: Record<string, string>; users?: MockRow[]; shares?: MockRow[]; tagNames?: string[]; sessions?: MockRow[]; resyncNotes?: MockRow[] }): { db: MockDb; runs: string[] } {
   const runs: string[] = []
   const db = makeDb([
     ['SELECT key, value FROM app_meta', async () => ({ all: overrides.sessions ?? [] })],
     ['FROM app_meta', async (args) => {
       const key = args[0] as string
-      if (key === 'blog_seed:v14') return { first: null }
+      if (key === 'blog_seed:v14' || key === 'blog_seed:moments-tags-v1') return { first: null }
       const value = overrides.meta?.[key]
       return { first: value !== undefined ? { value } : null }
     }],
     ['FROM users', async () => ({ all: overrides.users ?? [{ id: 'u1', password_hash: 'acct-hash' }] })],
     ['FROM shares', async () => ({ all: overrides.shares ?? [] })],
+    ['FROM notes n', async () => ({ all: overrides.resyncNotes ?? [] })],
     ['FROM note_tags', async () => ({ all: (overrides.tagNames ?? []).map((name) => ({ name })) })],
-    ['JOIN folders', async () => ({ first: overrides.folderName ? { name: overrides.folderName } : null })],
   ], runs)
   return { db, runs }
 }
@@ -96,7 +96,7 @@ describe('seedBlogTables', () => {
     expect(hasSql(db, 'INSERT OR IGNORE INTO blog_posts')).toBe(true)
   })
 
-  it('skips expired shares, trashed notes, and non-root moments folders', async () => {
+  it('skips expired shares and trashed notes', async () => {
     const { db } = seedDb({
       shares: [{ slug: 'hello', note_id: 'n1', created_at: 1000 }],
       tagNames: ['blog-public'],
@@ -104,8 +104,18 @@ describe('seedBlogTables', () => {
     await seedBlogTables(db as unknown as D1Database)
     expect(hasSql(db, 's.expires_at IS NULL')).toBe(true)
     expect(hasSql(db, 'n.deleted_at IS NULL')).toBe(true)
-    expect(hasSql(db, 'f.parent_id')).toBe(true)
-    expect(hasSql(db, 'f.deleted_at')).toBe(true)
+  })
+
+  it('classifies moments purely by tag', async () => {
+    const { db } = seedDb({
+      shares: [{ slug: 'm1', note_id: 'n1', created_at: 1000 }],
+      tagNames: ['moment-private'],
+    })
+    await seedBlogTables(db as unknown as D1Database)
+    const inserts = db.preparedArgs.filter((args) => args[2] === 'm1')
+    expect(inserts.length).toBe(1)
+    expect(inserts[0]).toContain('private')
+    expect(inserts[0]).toContain('moment')
   })
 
   it('moves blog sessions into blog_sessions and clears old keys', async () => {
@@ -124,5 +134,29 @@ describe('seedBlogTables', () => {
     ], runs)
     await seedBlogTables(db as unknown as D1Database)
     expect(hasSql(db, 'INSERT OR IGNORE INTO blog_settings')).toBe(false)
+  })
+})
+
+describe('reseedMomentsClassification', () => {
+  it('recomputes kinds from tags and marks completion', async () => {
+    const { db } = seedDb({
+      resyncNotes: [{ id: 'n1', tag_names: 'moment-public' }],
+      tagNames: ['moment-public'],
+    })
+    await reseedMomentsClassification(db as unknown as D1Database)
+    expect(hasSql(db, 'INSERT INTO blog_posts')).toBe(true)
+    const markers = db.preparedArgs.filter((args) => args[0] === 'blog_seed:moments-tags-v1' && args[1] === 'done')
+    expect(markers.length).toBe(1)
+  })
+
+  it('skips work when the reseed marker is set', async () => {
+    const runs: string[] = []
+    const db = makeDb([
+      ['FROM app_meta', async (args) => ({
+        first: args[0] === 'blog_seed:moments-tags-v1' ? { value: 'done' } : null,
+      })],
+    ], runs)
+    await reseedMomentsClassification(db as unknown as D1Database)
+    expect(hasSql(db, 'INSERT INTO blog_posts')).toBe(false)
   })
 })

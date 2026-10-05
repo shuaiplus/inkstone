@@ -16,7 +16,7 @@ import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie, BLOG_SESSION_COOKIE,
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
   setBlogDescription, getBlogDescription,
-  setBlogPublicTag, setBlogPrivateTag, setBlogMomentsFolder,
+  setBlogPublicTag, setBlogPrivateTag, setBlogMomentsPublicTag, setBlogMomentsPrivateTag,
   getBlogTagConfig, getBlogAccent,
   clearBlogSession, deleteBlogSessionCookie,
 } from './auth'
@@ -41,7 +41,8 @@ blogRoutes.get('/settings', async (c) => {
     description: (await getBlogDescription(c.env.DB, userId)),
     publicTag: settings.publicTag,
     privateTag: settings.privateTag,
-    momentsFolder: settings.momentsFolder,
+    momentsPublicTag: settings.momentsPublicTag,
+    momentsPrivateTag: settings.momentsPrivateTag,
   })
 })
 
@@ -53,7 +54,8 @@ blogRoutes.put('/settings', async (c) => {
     description?: string | null
     publicTag?: string
     privateTag?: string
-    momentsFolder?: string
+    momentsPublicTag?: string
+    momentsPrivateTag?: string
   }>(c, 4096)
   if (body.password !== undefined) {
     if (typeof body.password === 'string' && body.password.length > LIMITS.passwordMaxLength) {
@@ -75,15 +77,20 @@ blogRoutes.put('/settings', async (c) => {
     const tag = body.privateTag.trim()
     if (tag) await setBlogPrivateTag(c.env.DB, userId, tag)
   }
-  if (body.momentsFolder !== undefined) {
-    const folder = body.momentsFolder.trim()
-    if (folder) await setBlogMomentsFolder(c.env.DB, userId, folder)
+  if (body.momentsPublicTag !== undefined) {
+    const tag = body.momentsPublicTag.trim()
+    if (tag) await setBlogMomentsPublicTag(c.env.DB, userId, tag)
+  }
+  if (body.momentsPrivateTag !== undefined) {
+    const tag = body.momentsPrivateTag.trim()
+    if (tag) await setBlogMomentsPrivateTag(c.env.DB, userId, tag)
   }
   const after = await getBlogSettings(c.env.DB, userId)
   if (
     before.publicTag !== after.publicTag ||
     before.privateTag !== after.privateTag ||
-    before.momentsFolder !== after.momentsFolder
+    before.momentsPublicTag !== after.momentsPublicTag ||
+    before.momentsPrivateTag !== after.momentsPrivateTag
   ) {
     await resyncBlogPosts(c.env.DB, userId)
   }

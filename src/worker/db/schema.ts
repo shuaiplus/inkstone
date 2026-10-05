@@ -1,6 +1,6 @@
 /** Defines the idempotent final D1 schema initialized by every Worker isolate. */
 import type { DatabaseState, Env } from '../env'
-import { seedBlogTables } from '../blog/seed'
+import { reseedMomentsClassification, seedBlogTables } from '../blog/seed'
 import { getMeta, setMeta } from './metadata'
 
 const BACKUP_ARCHIVES_TABLE = `CREATE TABLE IF NOT EXISTS backup_archives (
@@ -22,6 +22,8 @@ const BLOG_SETTINGS_TABLE = `CREATE TABLE IF NOT EXISTS blog_settings (
   public_tag TEXT NOT NULL DEFAULT 'blog-public',
   private_tag TEXT NOT NULL DEFAULT 'blog-private',
   moments_folder TEXT NOT NULL DEFAULT 'Moments',
+  moments_public_tag TEXT NOT NULL DEFAULT 'moment-public',
+  moments_private_tag TEXT NOT NULL DEFAULT 'moment-private',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 )`
@@ -596,6 +598,13 @@ const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       BLOG_SESSIONS_USER_INDEX,
     ],
   },
+  {
+    version: 15,
+    statements: [
+      `ALTER TABLE blog_settings ADD COLUMN moments_public_tag TEXT NOT NULL DEFAULT 'moment-public'`,
+      `ALTER TABLE blog_settings ADD COLUMN moments_private_tag TEXT NOT NULL DEFAULT 'moment-private'`,
+    ],
+  },
 ]
 
 const FTS_STATEMENT = `CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -632,7 +641,7 @@ const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   backup_archives: ['user_id', 'target_id', 'destination', 'archive_path', 'created_at'],
   backup_runs: ['id', 'user_id', 'trigger', 'status', 'started_at', 'finished_at', 'note_count', 'file_count', 'bytes', 'detail'],
   shares: ['slug', 'note_id', 'user_id', 'password_hash', 'expires_at', 'views', 'created_at'],
-  blog_settings: ['user_id', 'title', 'description', 'password_hash', 'public_tag', 'private_tag', 'moments_folder', 'created_at', 'updated_at'],
+  blog_settings: ['user_id', 'title', 'description', 'password_hash', 'public_tag', 'private_tag', 'moments_folder', 'moments_public_tag', 'moments_private_tag', 'created_at', 'updated_at'],
   blog_posts: ['user_id', 'note_id', 'slug', 'visibility', 'kind', 'is_pinned', 'pinned_at', 'published_at', 'created_at', 'updated_at'],
   blog_sessions: ['token', 'user_id', 'expires_at', 'created_at'],
   share_asset_sessions: ['id', 'slug', 'password_hash', 'expires_at', 'created_at'],
@@ -768,6 +777,7 @@ async function createSchema(db: D1Database): Promise<DatabaseState> {
   // tests) converges: tables exist at this point on fresh and upgraded
   // installs alike, and the seed is idempotent via marker.
   await seedBlogTables(db)
+  await reseedMomentsClassification(db)
   if (initialized) {
     await db.batch(INDEX_SCHEMA_STATEMENTS.map((statement) => db.prepare(statement)))
   }

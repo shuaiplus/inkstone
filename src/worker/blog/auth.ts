@@ -89,16 +89,22 @@ export async function setBlogPrivateTag(db: D1Database, userId: string, tag: str
   await updateBlogSettings(db, userId, { privateTag: tag })
 }
 
-export async function setBlogMomentsFolder(db: D1Database, userId: string, folder: string): Promise<void> {
-  await updateBlogSettings(db, userId, { momentsFolder: folder })
+export async function setBlogMomentsPublicTag(db: D1Database, userId: string, tag: string): Promise<void> {
+  await updateBlogSettings(db, userId, { momentsPublicTag: tag })
+}
+
+export async function setBlogMomentsPrivateTag(db: D1Database, userId: string, tag: string): Promise<void> {
+  await updateBlogSettings(db, userId, { momentsPrivateTag: tag })
 }
 
 export async function getBlogTagConfig(db: D1Database, userId: string): Promise<BlogTagConfig> {
-  const [publicTag, privateTag] = await Promise.all([
-    getBlogPublicTag(db, userId),
-    getBlogPrivateTag(db, userId),
-  ])
-  return { publicTag, privateTag }
+  const settings = await getBlogSettings(db, userId)
+  return {
+    publicTag: settings.publicTag,
+    privateTag: settings.privateTag,
+    momentsPublicTag: settings.momentsPublicTag,
+    momentsPrivateTag: settings.momentsPrivateTag,
+  }
 }
 
 const BLOG_ACCENT_NAMES = new Set<string>(ACCENTS.map((accent) => accent.name))

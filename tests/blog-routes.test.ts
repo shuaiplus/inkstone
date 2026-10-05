@@ -40,7 +40,7 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[]; blo
   const seedCustom = meta.get('blog_password_hash:u1')
   if (seedCustom) blogSettings.set('u1', seedCustom)
   else if (options.accountHash) blogSettings.set('u1', options.accountHash)
-  const momentsFolders = new Map<string, string>()
+  const momentsTags = new Map<string, { pub: string; priv: string }>()
   const sessions = new Map<string, { userId: string; expiresAt: number }>()
   for (const [key, value] of meta) {
     const match = /^blog_session:([^:]+):(.+)$/.exec(key)
@@ -62,7 +62,7 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[]; blo
                 return { results: (options.blogPrivateNoteIds ?? []).map((id) => ({ id })) as T[] }
               if (sql.includes('LIMIT ?3 OFFSET ?4'))
                 return { results: posts as T[] }
-              if (sql.includes('FROM notes n LEFT JOIN folders'))
+              if (sql.includes('FROM notes n'))
                 return { results: (options.resyncNotes ?? []) as T[] }
               return { results: [] as T[] }
             },
@@ -76,12 +76,14 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[]; blo
                 return (hash === undefined ? null : { password_hash: hash }) as T | null
               }
               if (sql.includes('FROM blog_settings WHERE user_id')) {
+                const tags = momentsTags.get(String(args[0])) ?? { pub: 'moment-public', priv: 'moment-private' }
                 return {
                   title: '',
                   description: '',
                   public_tag: 'blog-public',
                   private_tag: 'blog-private',
-                  moments_folder: momentsFolders.get(String(args[0])) ?? 'Moments',
+                  moments_public_tag: tags.pub,
+                  moments_private_tag: tags.priv,
                 } as T | null
               }
               if (sql.includes('SELECT expires_at FROM blog_sessions')) {
@@ -121,12 +123,12 @@ function makeDb(options: DbOptions = {}): MockDb & { preparedSqls: string[]; blo
                 return { success: true }
               }
               if (sql.includes('INSERT INTO blog_settings')) {
-                // Password upsert binds 9 args (hash at index 3); the full
-                // settings upsert binds 8 args (moments folder at index 5).
-                if (args.length === 9) {
+                // Password upsert binds 10 args (hash at index 3); the full
+                // settings upsert binds 9 args (moment tags at 5 and 6).
+                if (args.length === 10) {
                   blogSettings.set(String(args[0]), String(args[3]))
                 } else {
-                  momentsFolders.set(String(args[0]), String(args[5]))
+                  momentsTags.set(String(args[0]), { pub: String(args[5]), priv: String(args[6]) })
                 }
                 return { success: true }
               }
@@ -414,14 +416,14 @@ describe('blog routes', () => {
     const app = makeAuthedApp()
     const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' }, meta })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ hasCustomPassword: true, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsFolder: 'Moments' })
+    expect(await res.json()).toEqual({ hasCustomPassword: true, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsPublicTag: 'moment-public', momentsPrivateTag: 'moment-private' })
   })
 
   it('GET /settings reports hasCustomPassword false when no custom password is set', async () => {
     const app = makeAuthedApp()
     const res = await app.request('/settings', {}, env(makeDb({ users: { alice: 'u1' } })))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsFolder: 'Moments' })
+    expect(await res.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsPublicTag: 'moment-public', momentsPrivateTag: 'moment-private' })
   })
 
   it('PUT /settings with password null clears the custom password without touching posts', async () => {
@@ -467,7 +469,7 @@ describe('blog routes', () => {
     expect(db.blogSettings.get('u1')).toBe(passwordHash)
 
     const settings = await app.request('/settings', {}, env(db))
-    expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsFolder: 'Moments' })
+    expect(await settings.json()).toEqual({ hasCustomPassword: false, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsPublicTag: 'moment-public', momentsPrivateTag: 'moment-private' })
 
     const auth = await app.request(
       '/alice/auth',
@@ -482,10 +484,10 @@ describe('blog routes', () => {
     expect(await auth.json()).toEqual({ ok: true })
   })
 
-  it('PUT /settings with momentsFolder resyncs posts for the new folder', async () => {
+  it('PUT /settings with momentsPublicTag resyncs posts for the new tag', async () => {
     const db = makeDb({
       users: { alice: 'u1' },
-      resyncNotes: [{ id: 'n1', folder_id: 'f1', folder_name: 'NewMoments', folder_parent: null, folder_deleted: null, tag_names: null }],
+      resyncNotes: [{ id: 'n1', tag_names: 'my-moments' }],
     })
     const app = makeAuthedApp()
     const res = await app.request(
@@ -493,7 +495,7 @@ describe('blog routes', () => {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ momentsFolder: 'NewMoments' }),
+        body: JSON.stringify({ momentsPublicTag: 'my-moments' }),
       },
       env(db),
     )
@@ -567,7 +569,7 @@ describe('blog routes', () => {
     expect(db.preparedSqls.some((s) => s.includes('blog_posts'))).toBe(false)
 
     const settings = await app.request('/settings', {}, env(db))
-    expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsFolder: 'Moments' })
+    expect(await settings.json()).toEqual({ hasCustomPassword: true, title: null, description: null, publicTag: 'blog-public', privateTag: 'blog-private', momentsPublicTag: 'moment-public', momentsPrivateTag: 'moment-private' })
 
     const oldAuth = await app.request(
       '/alice/auth',

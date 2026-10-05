@@ -1,4 +1,4 @@
-import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENT_PRIVATE_TAG, MOMENT_PUBLIC_TAG } from '@shared/blog/tags'
 import { getMeta } from '../db/metadata'
 
 export interface BlogSettings {
@@ -6,7 +6,8 @@ export interface BlogSettings {
   description: string
   publicTag: string
   privateTag: string
-  momentsFolder: string
+  momentsPublicTag: string
+  momentsPrivateTag: string
 }
 
 const BLOG_TITLE_KEY = (userId: string): string => `blog_title:${userId}`
@@ -22,31 +23,33 @@ interface BlogSettingsRow {
   description: string
   public_tag: string
   private_tag: string
-  moments_folder: string
+  moments_public_tag: string | null
+  moments_private_tag: string | null
 }
 
 /**
  * Partial update of blog_settings, creating the row when the user was
- * created after the v14 seed marker. Only touched columns move.
+ * created after the seed marker. Only touched columns move.
  */
 export async function updateBlogSettings(
   db: D1Database,
   userId: string,
-  patch: Partial<Pick<BlogSettings, 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsFolder'>>,
+  patch: Partial<Pick<BlogSettings, 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsPublicTag' | 'momentsPrivateTag'>>,
 ): Promise<void> {
   const now = Date.now()
   const current = await getBlogSettings(db, userId)
   await db
     .prepare(
       `INSERT INTO blog_settings
-        (user_id, title, description, password_hash, public_tag, private_tag, moments_folder, created_at, updated_at)
-        VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8)
+        (user_id, title, description, password_hash, public_tag, private_tag, moments_public_tag, moments_private_tag, created_at, updated_at)
+        VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9)
         ON CONFLICT(user_id) DO UPDATE SET
           title = excluded.title,
           description = excluded.description,
           public_tag = excluded.public_tag,
           private_tag = excluded.private_tag,
-          moments_folder = excluded.moments_folder,
+          moments_public_tag = excluded.moments_public_tag,
+          moments_private_tag = excluded.moments_private_tag,
           updated_at = excluded.updated_at`,
     )
     .bind(
@@ -55,23 +58,25 @@ export async function updateBlogSettings(
       patch.description ?? current.description,
       patch.publicTag ?? current.publicTag,
       patch.privateTag ?? current.privateTag,
-      patch.momentsFolder ?? current.momentsFolder,
+      patch.momentsPublicTag ?? current.momentsPublicTag,
+      patch.momentsPrivateTag ?? current.momentsPrivateTag,
       now,
       now,
     )
     .run()
 }
+
 export async function setBlogPasswordHash(db: D1Database, userId: string, passwordHash: string): Promise<void> {
   const now = Date.now()
   const current = await getBlogSettings(db, userId)
   await db
     .prepare(
       `INSERT INTO blog_settings
-        (user_id, title, description, password_hash, public_tag, private_tag, moments_folder, created_at, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        (user_id, title, description, password_hash, public_tag, private_tag, moments_public_tag, moments_private_tag, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
         ON CONFLICT(user_id) DO UPDATE SET password_hash = excluded.password_hash, updated_at = excluded.updated_at`,
     )
-    .bind(userId, current.title, current.description, passwordHash, current.publicTag, current.privateTag, current.momentsFolder, now, now)
+    .bind(userId, current.title, current.description, passwordHash, current.publicTag, current.privateTag, current.momentsPublicTag, current.momentsPrivateTag, now, now)
     .run()
 }
 
@@ -102,7 +107,7 @@ export async function trackAccountPasswordChange(
 export async function getBlogSettings(db: D1Database, userId: string): Promise<BlogSettings> {
   const row = await db
     .prepare(
-      `SELECT title, description, public_tag, private_tag, moments_folder
+      `SELECT title, description, public_tag, private_tag, moments_public_tag, moments_private_tag
          FROM blog_settings WHERE user_id = ?1`,
     )
     .bind(userId)
@@ -113,7 +118,8 @@ export async function getBlogSettings(db: D1Database, userId: string): Promise<B
       description: row.description,
       publicTag: row.public_tag,
       privateTag: row.private_tag,
-      momentsFolder: row.moments_folder,
+      momentsPublicTag: row.moments_public_tag ?? MOMENT_PUBLIC_TAG,
+      momentsPrivateTag: row.moments_private_tag ?? MOMENT_PRIVATE_TAG,
     }
   }
   const [title, description, publicTag, privateTag] = await Promise.all([
@@ -127,6 +133,7 @@ export async function getBlogSettings(db: D1Database, userId: string): Promise<B
     description: description ?? '',
     publicTag: publicTag || BLOG_PUBLIC_TAG,
     privateTag: privateTag || BLOG_PRIVATE_TAG,
-    momentsFolder: MOMENTS_FOLDER_NAME,
+    momentsPublicTag: MOMENT_PUBLIC_TAG,
+    momentsPrivateTag: MOMENT_PRIVATE_TAG,
   }
 }

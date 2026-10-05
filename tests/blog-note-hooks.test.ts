@@ -211,39 +211,29 @@ describe('blog note hooks', () => {
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('CREATE in the Moments folder ensures a public blog post without any tag', async () => {
+  it('CREATE with the moment-public tag ensures a public moment post', async () => {
     const db = makeDb({ accountHash: 'acct-hash' })
     const app = makeApp(db)
     const res = await request(app, db, '/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: N1, folderId: 'moments-folder', content: UNTAGGED_CONTENT }),
+      body: JSON.stringify({ id: N1, content: '---\ntags:\n  - moment-public\n---\n# Hello\n' }),
     })
     expect(res.status).toBe(201)
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
     expect(db.hasSql('UPDATE blog_posts')).toBe(false)
   })
 
-  it('PATCH moving a plain note into the Moments folder creates a private blog post', async () => {
+  it('PATCH adding the moment-private tag ensures a private moment post', async () => {
     const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT })], accountHash: 'acct-hash' })
-    const app = makeApp(db)
-    const res = await request(app, db, `/api/notes/${N1}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rev: 1, folderId: 'moments-folder' }),
-    })
+    const res = await patch(db, N1, '---\ntags:\n  - moment-private\n---\n# Secret\n')
     expect(res.status).toBe(200)
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(true)
   })
 
-  it('PATCH moving a Moments note out of the folder withdraws the blog post', async () => {
-    const db = makeDb({ notes: [seedNote({ id: N1, content: UNTAGGED_CONTENT, folder_id: 'moments-folder' })], accountHash: 'acct-hash' })
-    const app = makeApp(db)
-    const res = await request(app, db, `/api/notes/${N1}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rev: 1, folderId: null }),
-    })
+  it('PATCH removing the moment tag withdraws the blog post', async () => {
+    const db = makeDb({ notes: [seedNote({ id: N1, content: '---\ntags:\n  - moment-public\n---\n# Hello\n' })], accountHash: 'acct-hash' })
+    const res = await patch(db, N1, '# Hello without tags\n')
     expect(res.status).toBe(200)
     expect(db.hasSql('DELETE FROM blog_posts')).toBe(true)
     expect(db.hasSql('INSERT INTO blog_posts')).toBe(false)

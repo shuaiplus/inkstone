@@ -11,7 +11,7 @@ import type {
   SortOrder,
   ViewKind,
 } from '@shared/types'
-import { isMomentsFolder, syncBlogPost, withdrawBlogPost } from '../blog/publish'
+import { syncBlogPost, withdrawBlogPost } from '../blog/publish'
 import type { AppBindings } from '../env'
 import { NOTE_COLUMNS, NOTE_COLUMNS_FULL, splitTags, toNote, toNoteSummary, type NoteRow } from '../db/rows'
 import {
@@ -335,9 +335,7 @@ notesRoutes.post('/', async (c) => {
   if (!created) throw ApiError.conflict('This note id is already in use')
   await broadcastCursor(c)
   if (insertResult?.meta.changes) {
-    await syncBlogPost(c.env.DB, userId, id, extractTags(content), {
-      inMoments: await isMomentsFolder(c.env.DB, userId, folderId),
-    })
+    await syncBlogPost(c.env.DB, userId, id, extractTags(content))
     await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
     scheduleFtsDrain(c)
   }
@@ -523,16 +521,12 @@ notesRoutes.patch('/:id', async (c) => {
     const current = await loadNote(c.env.DB, userId, id)
     throw ApiError.conflict('This note was modified elsewhere', { server: current })
   }
-  if (contentChanged || folderChanged) {
-    const nextInMoments = folderChanged
-      ? await isMomentsFolder(c.env.DB, userId, newFolderId)
-      : await isMomentsFolder(c.env.DB, userId, row.folder_id)
+  if (contentChanged) {
     await syncBlogPost(
       c.env.DB,
       userId,
       id,
       contentChanged ? (derivedTags ?? extractTags(newContent)) : splitTags(row.tag_names),
-      { inMoments: nextInMoments },
     )
   }
   const changeResult = results.at(-1) as D1Result<{ seq: number }> | undefined
@@ -681,9 +675,7 @@ notesRoutes.post('/:id/restore', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
-  await syncBlogPost(c.env.DB, userId, id, extractTags(row.content), {
-    inMoments: await isMomentsFolder(c.env.DB, userId, row.folder_id),
-  })
+  await syncBlogPost(c.env.DB, userId, id, extractTags(row.content))
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   scheduleFtsDrain(c)
@@ -841,9 +833,7 @@ notesRoutes.post('/:id/duplicate', async (c) => {
     }
     throw error
   }
-  await syncBlogPost(c.env.DB, userId, id, extractTags(content), {
-    inMoments: await isMomentsFolder(c.env.DB, userId, source.folder_id),
-  })
+  await syncBlogPost(c.env.DB, userId, id, extractTags(content))
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   scheduleFtsDrain(c)
@@ -970,10 +960,7 @@ notesRoutes.post('/:id/versions/:versionId/restore', async (c) => {
   if (!updated?.meta.changes) {
     throw ApiError.conflict('This note was modified elsewhere', { server: await loadNote(c.env.DB, userId, id) })
   }
-  const currentInMoments = await isMomentsFolder(c.env.DB, userId, current.folder_id)
-  await syncBlogPost(c.env.DB, userId, id, extractTags(version.content), {
-    inMoments: currentInMoments,
-  })
+  await syncBlogPost(c.env.DB, userId, id, extractTags(version.content))
   await broadcastCursor(c)
   await enqueueNoteIndex(c.env.DB, userId, id, 'embed')
   scheduleFtsDrain(c)
