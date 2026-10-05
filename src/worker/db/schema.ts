@@ -596,6 +596,7 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   },
   {
     version: 15,
+    skipIfColumnExists: { table: 'blog_settings', column: 'moments_public_tag' },
     statements: [
       `ALTER TABLE blog_settings ADD COLUMN moments_public_tag TEXT NOT NULL DEFAULT 'moment-public'`,
       `ALTER TABLE blog_settings ADD COLUMN moments_private_tag TEXT NOT NULL DEFAULT 'moment-private'`,
@@ -603,6 +604,10 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   },
   {
     version: 16,
+    // Fresh installs already get settings_json from the base table
+    // definition above; skip the whole migration in that case (the ADD
+    // would fail as duplicate and the DROPs would fail as missing).
+    skipIfColumnExists: { table: 'blog_settings', column: 'settings_json' },
     statements: [
       `ALTER TABLE blog_settings ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}'`,
       `UPDATE blog_settings SET settings_json = json_object('publicTag', public_tag, 'privateTag', private_tag, 'momentsTag', 'moment')`,
