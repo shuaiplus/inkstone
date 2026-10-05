@@ -16,7 +16,7 @@ import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie, BLOG_SESSION_COOKIE,
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
   setBlogDescription, getBlogDescription,
-  setBlogPublicTag, setBlogPrivateTag,
+  setBlogPublicTag, setBlogPrivateTag, setBlogMomentsFolder,
   getBlogTagConfig, getBlogAccent,
   clearBlogSession, deleteBlogSessionCookie,
 } from './auth'
@@ -25,6 +25,8 @@ import {
   listBlogMoments, listBlogTimeline, listBlogTags, listPostsByTag,
   getAdjacentPosts,
 } from './queries'
+import { resyncBlogPosts } from './publish'
+import { getBlogSettings } from './settings'
 
 export const blogRoutes = new Hono<AppBindings>()
 
@@ -32,13 +34,14 @@ blogRoutes.use('/settings', requireAuth)
 
 blogRoutes.get('/settings', async (c) => {
   const userId = c.get('userId')
-  const config = await getBlogTagConfig(c.env.DB, userId)
+  const settings = await getBlogSettings(c.env.DB, userId)
   return c.json({
     hasCustomPassword: await hasBlogPassword(c.env.DB, userId),
-    title: await getBlogTitle(c.env.DB, userId),
-    description: await getBlogDescription(c.env.DB, userId),
-    publicTag: config.publicTag,
-    privateTag: config.privateTag,
+    title: (await getBlogTitle(c.env.DB, userId)),
+    description: (await getBlogDescription(c.env.DB, userId)),
+    publicTag: settings.publicTag,
+    privateTag: settings.privateTag,
+    momentsFolder: settings.momentsFolder,
   })
 })
 
@@ -50,6 +53,7 @@ blogRoutes.put('/settings', async (c) => {
     description?: string | null
     publicTag?: string
     privateTag?: string
+    momentsFolder?: string
   }>(c, 4096)
   if (body.password !== undefined) {
     if (typeof body.password === 'string' && body.password.length > LIMITS.passwordMaxLength) {
@@ -62,6 +66,7 @@ blogRoutes.put('/settings', async (c) => {
   }
   if (body.title !== undefined) await setBlogTitle(c.env.DB, userId, body.title)
   if (body.description !== undefined) await setBlogDescription(c.env.DB, userId, body.description ?? '')
+  const before = await getBlogSettings(c.env.DB, userId)
   if (body.publicTag !== undefined) {
     const tag = body.publicTag.trim()
     if (tag) await setBlogPublicTag(c.env.DB, userId, tag)
@@ -70,7 +75,36 @@ blogRoutes.put('/settings', async (c) => {
     const tag = body.privateTag.trim()
     if (tag) await setBlogPrivateTag(c.env.DB, userId, tag)
   }
+  if (body.momentsFolder !== undefined) {
+    const folder = body.momentsFolder.trim()
+    if (folder) await setBlogMomentsFolder(c.env.DB, userId, folder)
+  }
+  const after = await getBlogSettings(c.env.DB, userId)
+  if (
+    before.publicTag !== after.publicTag ||
+    before.privateTag !== after.privateTag ||
+    before.momentsFolder !== after.momentsFolder
+  ) {
+    await resyncBlogPosts(c.env.DB, userId)
+  }
   return c.json({ ok: true })
+})
+
+blogRoutes.put('/posts/:noteId/pin', requireAuth, async (c) => {
+  const userId = c.get('userId')
+  const noteId = c.req.param('noteId')
+  const row = await c.env.DB
+    .prepare(`SELECT is_pinned FROM blog_posts WHERE user_id = ?1 AND note_id = ?2`)
+    .bind(userId, noteId)
+    .first<{ is_pinned: number }>()
+  if (!row) throw ApiError.notFound('Blog post not found')
+  const next = row.is_pinned === 1 ? 0 : 1
+  const now = Date.now()
+  await c.env.DB
+    .prepare(`UPDATE blog_posts SET is_pinned = ?1, pinned_at = ?2, updated_at = ?3 WHERE user_id = ?4 AND note_id = ?5`)
+    .bind(next, next === 1 ? now : null, now, userId, noteId)
+    .run()
+  return c.json({ is_pinned: next })
 })
 
 blogRoutes.get('/owner', async (c) => {

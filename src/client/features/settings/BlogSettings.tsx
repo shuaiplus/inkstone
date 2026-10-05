@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { KeyRound, RefreshCw, Rss, Tag, Trash2 } from 'lucide-react'
+import { Folder, KeyRound, RefreshCw, Rss, Tag, Trash2 } from 'lucide-react'
 import { LIMITS } from '@shared/constants'
-import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG } from '@shared/blog/tags'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_FOLDER_NAME } from '@shared/blog/tags'
 import { blogApi } from '../../blog/api'
 import { Button } from '../../components/primitives'
 import { Input } from '../../components/form'
@@ -11,7 +11,7 @@ import { useSession } from '../../store/session'
 import { useUi } from '../../store/ui'
 import { t } from '../../lib/i18n'
 
-type BusyAction = 'title' | 'description' | 'publicTag' | 'privateTag' | 'setPassword' | 'clearPassword' | null
+type BusyAction = 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsFolder' | 'setPassword' | 'clearPassword' | null
 
 export function BlogSettings() {
   const username = useSession((s) => s.user?.username)
@@ -23,6 +23,7 @@ export function BlogSettings() {
   const [description, setDescription] = useState('')
   const [publicTag, setPublicTag] = useState(BLOG_PUBLIC_TAG)
   const [privateTag, setPrivateTag] = useState(BLOG_PRIVATE_TAG)
+  const [momentsFolder, setMomentsFolder] = useState(MOMENTS_FOLDER_NAME)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<BusyAction>(null)
   const mountedRef = useRef(true)
@@ -39,6 +40,7 @@ export function BlogSettings() {
         setHasCustomPassword(settings.hasCustomPassword)
         setPublicTag(settings.publicTag || BLOG_PUBLIC_TAG)
         setPrivateTag(settings.privateTag || BLOG_PRIVATE_TAG)
+        setMomentsFolder(settings.momentsFolder || MOMENTS_FOLDER_NAME)
       }
     } catch (error) {
       if (mountedRef.current) setLoadError(errorMessage(error))
@@ -124,6 +126,20 @@ export function BlogSettings() {
       await blogApi.updateSettings({ privateTag: next })
       if (mountedRef.current) setPrivateTag(next)
       toast({ title: t('settings.blog_tag_saved'), tone: 'success' })
+    } catch (error) {
+      fail(error)
+    } finally {
+      finish()
+    }
+  }
+
+  const saveMomentsFolder = async () => {
+    if (!begin('momentsFolder')) return
+    const next = momentsFolder.trim()
+    try {
+      await blogApi.updateSettings({ momentsFolder: next })
+      if (mountedRef.current) setMomentsFolder(next)
+      toast({ title: t('settings.blog_moments_folder_saved'), tone: 'success' })
     } catch (error) {
       fail(error)
     } finally {
@@ -269,6 +285,27 @@ export function BlogSettings() {
               onKeyDown={(e) => { if (e.key === 'Enter') void savePrivateTag() }}
             />
             <Button size="sm" variant="secondary" loading={busy === 'privateTag'} disabled={busy !== null} onClick={() => void savePrivateTag()}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
+            <Folder size={12} />
+            <label>{t('settings.blog_moments_folder')}</label>
+          </div>
+          <p className="mb-1 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
+            {t('settings.blog_moments_folder_desc')}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={momentsFolder}
+              maxLength={64}
+              placeholder={MOMENTS_FOLDER_NAME}
+              onChange={(e) => setMomentsFolder(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void saveMomentsFolder() }}
+            />
+            <Button size="sm" variant="secondary" loading={busy === 'momentsFolder'} disabled={busy !== null} onClick={() => void saveMomentsFolder()}>
               {t('common.save')}
             </Button>
           </div>

@@ -86,6 +86,10 @@ export async function setBlogPrivateTag(db: D1Database, userId: string, tag: str
   await updateBlogSettings(db, userId, { privateTag: tag })
 }
 
+export async function setBlogMomentsFolder(db: D1Database, userId: string, folder: string): Promise<void> {
+  await updateBlogSettings(db, userId, { momentsFolder: folder })
+}
+
 export async function getBlogTagConfig(db: D1Database, userId: string): Promise<BlogTagConfig> {
   const [publicTag, privateTag] = await Promise.all([
     getBlogPublicTag(db, userId),

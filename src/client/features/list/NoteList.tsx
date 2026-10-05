@@ -6,6 +6,7 @@ import { cn } from '../../lib/cn';
 import { groupLabel } from '../../lib/time';
 import { useDebounced, useNow } from '../../lib/hooks';
 import { api } from '../../lib/api';
+import { blogApi } from '../../blog/api';
 import { fuzzyFilter, splitByRanges } from '../../lib/fuzzy';
 import { useBreakpoint } from '../../lib/hooks';
 import { matches, prettyCombo } from '../../lib/hotkeys';
@@ -459,6 +460,20 @@ const NoteRow = memo(function NoteRow({ note, highlight, density, tagColors, pos
                 icon: note.isStarred ? <StarOff size={13}/> : <Star size={13}/>,
                 combo: active ? APP_SHORTCUTS.star : undefined,
                 onSelect: () => void patchNote(note.id, { isStarred: !note.isStarred }),
+            },
+            {
+                id: 'blog-pin',
+                label: t("blog.toggle_pin"),
+                icon: <Pin size={13}/>,
+                onSelect: () => void (async () => {
+                    try {
+                        const result = await blogApi.togglePin(note.id);
+                        toast({ title: result.is_pinned === 1 ? t("blog.pinned") : t("blog.unpinned"), tone: 'success' });
+                    }
+                    catch {
+                        toast({ title: t("blog.not_published"), tone: 'danger' });
+                    }
+                })(),
             },
             { id: 'duplicate', label: t("notes.create_a_copy"), icon: <Copy size={13}/>, onSelect: () => void duplicateNote(note.id) },
             {

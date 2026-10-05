@@ -1,5 +1,6 @@
 import { blogTierOfTags, type BlogTagConfig, type BlogTier } from '@shared/blog/tags'
 import { newSlug } from '../lib/id'
+import { splitTags } from '../db/rows'
 import { getBlogSettings } from './settings'
 
 export function blogTier(inMoments: boolean, tags: readonly string[], config?: BlogTagConfig): BlogTier {
@@ -93,4 +94,38 @@ export async function syncBlogPost(
     return
   }
   await ensureBlogPost(db, userId, noteId, tier, inMoments ? 'moment' : 'article')
+}
+
+/**
+ * Full recompute for one user after tag or moments-folder renames.
+ * Per-note sync keeps slug/published_at frozen; only tier/kind move.
+ */
+export async function resyncBlogPosts(db: D1Database, userId: string): Promise<void> {
+  const settings = await getBlogSettings(db, userId)
+  const { results } = await db
+    .prepare(
+      `SELECT n.id, n.folder_id, f.name AS folder_name, f.parent_id AS folder_parent, f.deleted_at AS folder_deleted,
+        (SELECT GROUP_CONCAT(t.name, char(1)) FROM note_tags nt
+           JOIN tags t ON t.id = nt.tag_id
+          WHERE nt.note_id = n.id AND t.user_id = n.user_id) AS tag_names
+         FROM notes n LEFT JOIN folders f ON f.id = n.folder_id
+        WHERE n.user_id = ?1 AND n.deleted_at IS NULL`,
+    )
+    .bind(userId)
+    .all<{
+      id: string
+      folder_id: string | null
+      folder_name: string | null
+      folder_parent: string | null
+      folder_deleted: number | null
+      tag_names: string | null
+    }>()
+  for (const note of results) {
+    const inMoments =
+      note.folder_id !== null &&
+      note.folder_name === settings.momentsFolder &&
+      note.folder_parent === null &&
+      note.folder_deleted === null
+    await syncBlogPost(db, userId, note.id, splitTags(note.tag_names), { inMoments })
+  }
 }
