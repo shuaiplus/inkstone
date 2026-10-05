@@ -25,9 +25,11 @@ describe('blog independent tables (migration 14)', () => {
 })
 
 describe('blog settings JSON (migration 16)', () => {
-  it('adds settings_json and drops the per-tag columns', () => {
+  it('adds and backfills settings_json without destructive DDL', () => {
     expect(migrationSource).toContain('ADD COLUMN settings_json')
-    expect(migrationSource).toContain('DROP COLUMN public_tag')
-    expect(migrationSource).toContain('DROP COLUMN moments_folder')
+    expect(migrationSource).toContain('json_object')
+    // Column drops are conditional code (dropLegacyBlogColumns), never
+    // static migration statements, so skipped migrations can't strand them.
+    expect(migrationSource).not.toContain('DROP COLUMN')
   })
 })

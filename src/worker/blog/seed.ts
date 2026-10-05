@@ -134,6 +134,29 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
 }
 
 /**
+ * Drops pre-JSON tag columns that a skipped migration 16 would otherwise
+ * leave behind (e.g. v15's columns on installs that crashed on the old v16).
+ * Conditional per column, so every database state converges; failures never
+ * break init because the columns are unused dead weight.
+ */
+export async function dropLegacyBlogColumns(db: D1Database): Promise<void> {
+  const { results } = await db
+    .prepare(`PRAGMA table_info(blog_settings)`)
+    .all<{ name: string }>()
+  const present = new Set(results.map((row) => row.name))
+  const legacy = ['public_tag', 'private_tag', 'moments_public_tag', 'moments_private_tag', 'moments_folder']
+  for (const column of legacy) {
+    if (!present.has(column)) continue
+    try {
+      await db.prepare(`ALTER TABLE blog_settings DROP COLUMN ${column}`).run()
+      present.delete(column)
+    } catch (error) {
+      console.warn(`[inkstone] Skipping DROP COLUMN blog_settings.${column}:`, error instanceof Error ? error.message : error)
+    }
+  }
+}
+
+/**
  * Recomputes kind/visibility for existing blog_posts after the Moments model
  * switched to orthogonal tags. Idempotent via marker; reuses the same
  * per-note sync as live writes so results match going forward.

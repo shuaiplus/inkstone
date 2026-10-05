@@ -1,6 +1,6 @@
 /** Defines the idempotent final D1 schema initialized by every Worker isolate. */
 import type { DatabaseState, Env } from '../env'
-import { reseedMomentsClassification, seedBlogTables } from '../blog/seed'
+import { dropLegacyBlogColumns, reseedMomentsClassification, seedBlogTables } from '../blog/seed'
 import { getMeta, setMeta } from './metadata'
 
 const BACKUP_ARCHIVES_TABLE = `CREATE TABLE IF NOT EXISTS backup_archives (
@@ -606,16 +606,12 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
     version: 16,
     // Fresh installs already get settings_json from the base table
     // definition above; skip the whole migration in that case (the ADD
-    // would fail as duplicate and the DROPs would fail as missing).
+    // would fail as duplicate). Dropped columns are handled by
+    // dropLegacyBlogColumns instead, which is conditional per column.
     skipIfColumnExists: { table: 'blog_settings', column: 'settings_json' },
     statements: [
       `ALTER TABLE blog_settings ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}'`,
       `UPDATE blog_settings SET settings_json = json_object('publicTag', public_tag, 'privateTag', private_tag, 'momentsTag', 'moment')`,
-      `ALTER TABLE blog_settings DROP COLUMN public_tag`,
-      `ALTER TABLE blog_settings DROP COLUMN private_tag`,
-      `ALTER TABLE blog_settings DROP COLUMN moments_public_tag`,
-      `ALTER TABLE blog_settings DROP COLUMN moments_private_tag`,
-      `ALTER TABLE blog_settings DROP COLUMN moments_folder`,
     ],
   },
 ]
@@ -790,6 +786,7 @@ async function createSchema(db: D1Database): Promise<DatabaseState> {
   // tests) converges: tables exist at this point on fresh and upgraded
   // installs alike, and the seed is idempotent via marker.
   await seedBlogTables(db)
+  await dropLegacyBlogColumns(db)
   await reseedMomentsClassification(db)
   if (initialized) {
     await db.batch(INDEX_SCHEMA_STATEMENTS.map((statement) => db.prepare(statement)))

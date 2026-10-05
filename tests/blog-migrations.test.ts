@@ -110,4 +110,30 @@ describe('blog migration upgrade paths', () => {
     expect(before.ftsEnabled).toBe(true)
     expect(blogSettingsColumns(sqlite)).toContain('settings_json')
   }, 60000)
+
+  it('drops stray v15 columns left by the crashed upgrade', async () => {
+    const { initializeDatabase } = await import('../src/worker/db/schema')
+    const { db, sqlite } = v13Database()
+    // Production state after the buggy deploy: new-def table (with
+    // settings_json) plus v15's columns, v16 never recorded.
+    sqlite.exec(`
+      CREATE TABLE blog_settings (
+        user_id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '', password_hash TEXT NOT NULL,
+        settings_json TEXT NOT NULL DEFAULT '{}',
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      ALTER TABLE blog_settings ADD COLUMN moments_public_tag TEXT NOT NULL DEFAULT 'moment-public';
+      ALTER TABLE blog_settings ADD COLUMN moments_private_tag TEXT NOT NULL DEFAULT 'moment-private';
+      INSERT INTO blog_settings VALUES ('u1', '', '', 'h', '{}', 1, 2, 'a', 'b');
+    `)
+    // v14/v15 batches succeeded on prod (only v16 threw), so versions stuck.
+    sqlite.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (14, 1)').run()
+    sqlite.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (15, 2)').run()
+    await initializeDatabase({ DB: db } as never)
+    const cols = blogSettingsColumns(sqlite)
+    expect(cols).toContain('settings_json')
+    expect(cols).not.toContain('moments_public_tag')
+    expect(cols).not.toContain('moments_private_tag')
+  }, 60000)
 })
