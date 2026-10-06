@@ -307,27 +307,6 @@ export function BlogSettings() {
         </div>
         <div>
           <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
-            <Folder size={12} />
-            <label>{t('settings.blog_moments_tag')}</label>
-          </div>
-          <p className="mb-1 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
-            {t('settings.blog_moments_tag_desc')}
-          </p>
-          <div className="flex gap-2">
-            <Input
-              value={momentsTag}
-              maxLength={64}
-              placeholder={MOMENTS_TAG}
-              onChange={(e) => setMomentsTag(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void saveMomentsTag() }}
-            />
-            <Button size="sm" variant="secondary" loading={busy === 'momentsTag'} disabled={busy !== null} onClick={() => void saveMomentsTag()}>
-              {t('common.save')}
-            </Button>
-          </div>
-        </div>
-        <div>
-          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
             <Pin size={12} />
             <label>{t('settings.blog_pinned_tag')}</label>
           </div>
@@ -343,6 +322,27 @@ export function BlogSettings() {
               onKeyDown={(e) => { if (e.key === 'Enter') void savePinnedTag() }}
             />
             <Button size="sm" variant="secondary" loading={busy === 'pinnedTag'} disabled={busy !== null} onClick={() => void savePinnedTag()}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
+            <Folder size={12} />
+            <label>{t('settings.blog_moments_tag')}</label>
+          </div>
+          <p className="mb-1 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
+            {t('settings.blog_moments_tag_desc')}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={momentsTag}
+              maxLength={64}
+              placeholder={MOMENTS_TAG}
+              onChange={(e) => setMomentsTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void saveMomentsTag() }}
+            />
+            <Button size="sm" variant="secondary" loading={busy === 'momentsTag'} disabled={busy !== null} onClick={() => void saveMomentsTag()}>
               {t('common.save')}
             </Button>
           </div>
