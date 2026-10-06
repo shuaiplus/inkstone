@@ -1,4 +1,4 @@
-import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG } from '@shared/blog/tags'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG, PINNED_TAG } from '@shared/blog/tags'
 import { getMeta } from '../db/metadata'
 
 export interface BlogSettings {
@@ -7,18 +7,21 @@ export interface BlogSettings {
   publicTag: string
   privateTag: string
   momentsTag: string
+  pinnedTag: string
 }
 
 export interface BlogTagConfigPatch {
   publicTag?: string
   privateTag?: string
   momentsTag?: string
+  pinnedTag?: string
 }
 
 const DEFAULT_TAG_CONFIG = {
   publicTag: BLOG_PUBLIC_TAG,
   privateTag: BLOG_PRIVATE_TAG,
   momentsTag: MOMENTS_TAG,
+  pinnedTag: PINNED_TAG,
 } as const
 
 const BLOG_TITLE_KEY = (userId: string): string => `blog_title:${userId}`
@@ -35,7 +38,7 @@ interface BlogSettingsRow {
   settings_json: string
 }
 
-function parseTagConfig(raw: string | null): Pick<BlogSettings, 'publicTag' | 'privateTag' | 'momentsTag'> {
+function parseTagConfig(raw: string | null): Pick<BlogSettings, 'publicTag' | 'privateTag' | 'momentsTag' | 'pinnedTag'> {
   let parsed: BlogTagConfigPatch = {}
   if (raw) {
     try {
@@ -45,10 +48,15 @@ function parseTagConfig(raw: string | null): Pick<BlogSettings, 'publicTag' | 'p
       // Corrupt JSON falls back to defaults below.
     }
   }
+  const pick = (key: keyof BlogTagConfigPatch, fallback: string): string => {
+    const v = parsed[key]
+    return typeof v === 'string' && v ? v : fallback
+  }
   return {
-    publicTag: typeof parsed.publicTag === 'string' && parsed.publicTag ? parsed.publicTag : DEFAULT_TAG_CONFIG.publicTag,
-    privateTag: typeof parsed.privateTag === 'string' && parsed.privateTag ? parsed.privateTag : DEFAULT_TAG_CONFIG.privateTag,
-    momentsTag: typeof parsed.momentsTag === 'string' && parsed.momentsTag ? parsed.momentsTag : DEFAULT_TAG_CONFIG.momentsTag,
+    publicTag: pick('publicTag', DEFAULT_TAG_CONFIG.publicTag),
+    privateTag: pick('privateTag', DEFAULT_TAG_CONFIG.privateTag),
+    momentsTag: pick('momentsTag', DEFAULT_TAG_CONFIG.momentsTag),
+    pinnedTag: pick('pinnedTag', DEFAULT_TAG_CONFIG.pinnedTag),
   }
 }
 
@@ -59,7 +67,7 @@ function parseTagConfig(raw: string | null): Pick<BlogSettings, 'publicTag' | 'p
 export async function updateBlogSettings(
   db: D1Database,
   userId: string,
-  patch: Partial<Pick<BlogSettings, 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsTag'>>,
+  patch: Partial<Pick<BlogSettings, 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsTag' | 'pinnedTag'>>,
 ): Promise<void> {
   const now = Date.now()
   const current = await getBlogSettings(db, userId)
@@ -69,6 +77,7 @@ export async function updateBlogSettings(
     publicTag: patch.publicTag ?? current.publicTag,
     privateTag: patch.privateTag ?? current.privateTag,
     momentsTag: patch.momentsTag ?? current.momentsTag,
+    pinnedTag: patch.pinnedTag ?? current.pinnedTag,
   }
   await db
     .prepare(
@@ -86,7 +95,7 @@ export async function updateBlogSettings(
     .bind(
       next.title,
       next.description,
-      JSON.stringify({ publicTag: next.publicTag, privateTag: next.privateTag, momentsTag: next.momentsTag }),
+      JSON.stringify({ publicTag: next.publicTag, privateTag: next.privateTag, momentsTag: next.momentsTag, pinnedTag: next.pinnedTag }),
       now,
       userId,
     )
@@ -153,5 +162,6 @@ export async function getBlogSettings(db: D1Database, userId: string): Promise<B
     publicTag: publicTag || BLOG_PUBLIC_TAG,
     privateTag: privateTag || BLOG_PRIVATE_TAG,
     momentsTag: MOMENTS_TAG,
+    pinnedTag: PINNED_TAG,
   }
 }

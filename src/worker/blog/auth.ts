@@ -93,12 +93,17 @@ export async function setBlogMomentsTag(db: D1Database, userId: string, tag: str
   await updateBlogSettings(db, userId, { momentsTag: tag })
 }
 
+export async function setBlogPinnedTag(db: D1Database, userId: string, tag: string): Promise<void> {
+  await updateBlogSettings(db, userId, { pinnedTag: tag })
+}
+
 export async function getBlogTagConfig(db: D1Database, userId: string): Promise<BlogTagConfig> {
   const settings = await getBlogSettings(db, userId)
   return {
     publicTag: settings.publicTag,
     privateTag: settings.privateTag,
     momentsTag: settings.momentsTag,
+    pinnedTag: settings.pinnedTag,
   }
 }
 

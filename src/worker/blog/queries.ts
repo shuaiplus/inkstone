@@ -38,7 +38,7 @@ const BLOG_POST_COLUMNS = `bp.note_id AS id, n.title, n.excerpt, bp.published_at
 
 const BLOG_POST_JOIN = `FROM blog_posts bp JOIN notes n ON n.id = bp.note_id AND n.user_id = bp.user_id`
 
-const PIN_ORDER = `bp.is_pinned DESC, COALESCE(bp.pinned_at, bp.published_at) DESC, bp.published_at DESC, bp.note_id DESC`
+const PIN_ORDER = `bp.is_pinned DESC, n.updated_at DESC, bp.published_at DESC, bp.note_id DESC`
 
 function visibilityClause(tier: 'public' | 'all'): string {
   return tier === 'public' ? `bp.visibility = 'public'` : `bp.visibility IN ('public', 'private')`
@@ -209,7 +209,7 @@ export async function listBlogMoments(
     .prepare(
       `SELECT n.id, n.content, n.created_at, bp.slug AS slug, ${TAG_SUBQUERY}
         ${from}
-        ORDER BY n.created_at DESC, n.id DESC
+        ORDER BY bp.is_pinned DESC, n.updated_at DESC, n.created_at DESC, n.id DESC
         LIMIT ? OFFSET ?`,
     )
     .bind(userId, limit, offset)

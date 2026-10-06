@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Folder, KeyRound, RefreshCw, Rss, Tag, Trash2 } from 'lucide-react'
+import { Folder, KeyRound, Pin, RefreshCw, Rss, Tag, Trash2 } from 'lucide-react'
 import { LIMITS } from '@shared/constants'
-import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG } from '@shared/blog/tags'
+import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG, PINNED_TAG } from '@shared/blog/tags'
 import { blogApi } from '../../blog/api'
 import { Button } from '../../components/primitives'
 import { Input } from '../../components/form'
@@ -11,7 +11,7 @@ import { useSession } from '../../store/session'
 import { useUi } from '../../store/ui'
 import { t } from '../../lib/i18n'
 
-type BusyAction = 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsTag' | 'setPassword' | 'clearPassword' | null
+type BusyAction = 'title' | 'description' | 'publicTag' | 'privateTag' | 'momentsTag' | 'pinnedTag' | 'setPassword' | 'clearPassword' | null
 
 export function BlogSettings() {
   const username = useSession((s) => s.user?.username)
@@ -24,6 +24,7 @@ export function BlogSettings() {
   const [publicTag, setPublicTag] = useState(BLOG_PUBLIC_TAG)
   const [privateTag, setPrivateTag] = useState(BLOG_PRIVATE_TAG)
   const [momentsTag, setMomentsTag] = useState(MOMENTS_TAG)
+  const [pinnedTag, setPinnedTag] = useState(PINNED_TAG)
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState<BusyAction>(null)
   const mountedRef = useRef(true)
@@ -41,6 +42,7 @@ export function BlogSettings() {
         setPublicTag(settings.publicTag || BLOG_PUBLIC_TAG)
         setPrivateTag(settings.privateTag || BLOG_PRIVATE_TAG)
         setMomentsTag(settings.momentsTag || MOMENTS_TAG)
+        setPinnedTag(settings.pinnedTag || PINNED_TAG)
       }
     } catch (error) {
       if (mountedRef.current) setLoadError(errorMessage(error))
@@ -139,6 +141,20 @@ export function BlogSettings() {
     try {
       await blogApi.updateSettings({ momentsTag: next })
       if (mountedRef.current) setMomentsTag(next)
+      toast({ title: t('settings.blog_tag_saved'), tone: 'success' })
+    } catch (error) {
+      fail(error)
+    } finally {
+      finish()
+    }
+  }
+
+  const savePinnedTag = async () => {
+    if (!begin('pinnedTag')) return
+    const next = pinnedTag.trim()
+    try {
+      await blogApi.updateSettings({ pinnedTag: next })
+      if (mountedRef.current) setPinnedTag(next)
       toast({ title: t('settings.blog_tag_saved'), tone: 'success' })
     } catch (error) {
       fail(error)
@@ -306,6 +322,27 @@ export function BlogSettings() {
               onKeyDown={(e) => { if (e.key === 'Enter') void saveMomentsTag() }}
             />
             <Button size="sm" variant="secondary" loading={busy === 'momentsTag'} disabled={busy !== null} onClick={() => void saveMomentsTag()}>
+              {t('common.save')}
+            </Button>
+          </div>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-[var(--text-tertiary)]">
+            <Pin size={12} />
+            <label>{t('settings.blog_pinned_tag')}</label>
+          </div>
+          <p className="mb-1 text-[10.5px] leading-relaxed text-[var(--text-quaternary)]">
+            {t('settings.blog_pinned_tag_desc')}
+          </p>
+          <div className="flex gap-2">
+            <Input
+              value={pinnedTag}
+              maxLength={64}
+              placeholder={PINNED_TAG}
+              onChange={(e) => setPinnedTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void savePinnedTag() }}
+            />
+            <Button size="sm" variant="secondary" loading={busy === 'pinnedTag'} disabled={busy !== null} onClick={() => void savePinnedTag()}>
               {t('common.save')}
             </Button>
           </div>

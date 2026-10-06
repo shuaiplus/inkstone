@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENTS_TAG, blogTierOfTags, blogEntryOfTags, hiddenBlogTags } from '../src/shared/blog/tags'
+import { BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENTS_TAG, PINNED_TAG, blogTierOfTags, blogEntryOfTags, hiddenBlogTags, isPinnedTag } from '../src/shared/blog/tags'
 
 describe('blog tier tags', () => {
   it('derives tier: none/public/private with private winning', () => {
@@ -15,9 +15,15 @@ describe('blog tier tags', () => {
     expect(blogTierOfTags(['my-private'], config)).toBe('private')
     expect(blogTierOfTags([BLOG_PUBLIC_TAG], config)).toBe('none')
   })
-  it('hiddenBlogTags returns all three configured tags', () => {
-    expect(hiddenBlogTags()).toEqual([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENTS_TAG])
-    expect(hiddenBlogTags({ publicTag: 'p', privateTag: 'q', momentsTag: 'm' })).toEqual(['p', 'q', 'm'])
+  it('hiddenBlogTags returns all configured tags', () => {
+    expect(hiddenBlogTags()).toEqual([BLOG_PUBLIC_TAG, BLOG_PRIVATE_TAG, MOMENTS_TAG, PINNED_TAG])
+    expect(hiddenBlogTags({ publicTag: 'p', privateTag: 'q', momentsTag: 'm', pinnedTag: 'pin' })).toEqual(['p', 'q', 'm', 'pin'])
+  })
+  it('isPinnedTag detects the pinned marker', () => {
+    expect(isPinnedTag([PINNED_TAG])).toBe(true)
+    expect(isPinnedTag(['x'])).toBe(false)
+    expect(isPinnedTag(['pin'], { publicTag: 'p', privateTag: 'q', pinnedTag: 'pin' })).toBe(true)
+    expect(isPinnedTag([PINNED_TAG], { publicTag: 'p', privateTag: 'q', pinnedTag: 'pin' })).toBe(false)
   })
 })
 

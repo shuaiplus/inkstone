@@ -16,7 +16,7 @@ import {
   blogAuthMiddleware, handleBlogAuth, setBlogSessionCookie, BLOG_SESSION_COOKIE,
   setBlogPassword, clearBlogPassword, setBlogTitle, getBlogTitle,
   setBlogDescription, getBlogDescription,
-  setBlogPublicTag, setBlogPrivateTag, setBlogMomentsTag,
+  setBlogPublicTag, setBlogPrivateTag, setBlogMomentsTag, setBlogPinnedTag,
   getBlogTagConfig, getBlogAccent,
   clearBlogSession, deleteBlogSessionCookie,
 } from './auth'
@@ -42,6 +42,7 @@ blogRoutes.get('/settings', async (c) => {
     publicTag: settings.publicTag,
     privateTag: settings.privateTag,
     momentsTag: settings.momentsTag,
+    pinnedTag: settings.pinnedTag,
   })
 })
 
@@ -54,6 +55,7 @@ blogRoutes.put('/settings', async (c) => {
     publicTag?: string
     privateTag?: string
     momentsTag?: string
+    pinnedTag?: string
   }>(c, 4096)
   if (body.password !== undefined) {
     if (typeof body.password === 'string' && body.password.length > LIMITS.passwordMaxLength) {
@@ -79,32 +81,20 @@ blogRoutes.put('/settings', async (c) => {
     const tag = body.momentsTag.trim()
     if (tag) await setBlogMomentsTag(c.env.DB, userId, tag)
   }
+  if (body.pinnedTag !== undefined) {
+    const tag = body.pinnedTag.trim()
+    if (tag) await setBlogPinnedTag(c.env.DB, userId, tag)
+  }
   const after = await getBlogSettings(c.env.DB, userId)
   if (
     before.publicTag !== after.publicTag ||
     before.privateTag !== after.privateTag ||
-    before.momentsTag !== after.momentsTag
+    before.momentsTag !== after.momentsTag ||
+    before.pinnedTag !== after.pinnedTag
   ) {
     await resyncBlogPosts(c.env.DB, userId)
   }
   return c.json({ ok: true })
-})
-
-blogRoutes.put('/posts/:noteId/pin', requireAuth, async (c) => {
-  const userId = c.get('userId')
-  const noteId = c.req.param('noteId')
-  const row = await c.env.DB
-    .prepare(`SELECT is_pinned FROM blog_posts WHERE user_id = ?1 AND note_id = ?2`)
-    .bind(userId, noteId)
-    .first<{ is_pinned: number }>()
-  if (!row) throw ApiError.notFound('Blog post not found')
-  const next = row.is_pinned === 1 ? 0 : 1
-  const now = Date.now()
-  await c.env.DB
-    .prepare(`UPDATE blog_posts SET is_pinned = ?1, pinned_at = ?2, updated_at = ?3 WHERE user_id = ?4 AND note_id = ?5`)
-    .bind(next, next === 1 ? now : null, now, userId, noteId)
-    .run()
-  return c.json({ is_pinned: next })
 })
 
 blogRoutes.get('/owner', async (c) => {
@@ -174,6 +164,7 @@ blogRoutes.get('/:username/meta', async (c) => {
     publicTag: config.publicTag,
     privateTag: config.privateTag,
     momentsTag: config.momentsTag,
+    pinnedTag: config.pinnedTag,
     accent: await getBlogAccent(c.env.DB, userId),
   })
 })

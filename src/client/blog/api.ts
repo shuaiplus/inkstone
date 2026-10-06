@@ -36,6 +36,7 @@ export interface BlogMeta {
   publicTag: string
   privateTag: string
   momentsTag: string
+  pinnedTag: string
   accent: string
 }
 
@@ -46,6 +47,7 @@ export interface BlogSettings {
   publicTag: string
   privateTag: string
   momentsTag: string
+  pinnedTag: string
 }
 
 export const blogApi = {
@@ -70,8 +72,6 @@ export const blogApi = {
     blogFetch<{ name: string; posts: BlogTagPost[] }>(`/${encodeURIComponent(username)}/tags/${encodeURIComponent(name)}`),
   settings: () =>
     blogFetch<BlogSettings>('/settings'),
-  updateSettings: (body: { password?: string | null; title?: string; description?: string | null; publicTag?: string; privateTag?: string; momentsTag?: string }) =>
+  updateSettings: (body: { password?: string | null; title?: string; description?: string | null; publicTag?: string; privateTag?: string; momentsTag?: string; pinnedTag?: string }) =>
     blogFetch<{ ok: true }>('/settings', { method: 'PUT', body: JSON.stringify(body) }),
-  togglePin: (noteId: string) =>
-    blogFetch<{ is_pinned: number }>(`/posts/${encodeURIComponent(noteId)}/pin`, { method: 'PUT' }),
 }

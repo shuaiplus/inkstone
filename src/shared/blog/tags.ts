@@ -1,6 +1,7 @@
 export const BLOG_PUBLIC_TAG = 'blog-public'
 export const BLOG_PRIVATE_TAG = 'blog-private'
 export const MOMENTS_TAG = 'moment'
+export const PINNED_TAG = 'blog-pinned'
 
 export type BlogTier = 'none' | 'public' | 'private'
 export type BlogKind = 'article' | 'moment'
@@ -9,6 +10,7 @@ export interface BlogTagConfig {
   publicTag: string
   privateTag: string
   momentsTag?: string
+  pinnedTag?: string
 }
 
 export interface BlogEntry {
@@ -41,5 +43,10 @@ export function hiddenBlogTags(config?: BlogTagConfig): string[] {
     config?.publicTag ?? BLOG_PUBLIC_TAG,
     config?.privateTag ?? BLOG_PRIVATE_TAG,
     config?.momentsTag ?? MOMENTS_TAG,
+    config?.pinnedTag ?? PINNED_TAG,
   ]
+}
+
+export function isPinnedTag(tags: readonly string[], config?: BlogTagConfig): boolean {
+  return tags.includes(config?.pinnedTag ?? PINNED_TAG)
 }

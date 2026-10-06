@@ -97,6 +97,21 @@ describe('syncBlogPost', () => {
     expect(hasSql(sqls, 'DELETE FROM blog_posts')).toBe(true)
   })
 
+  it('derives is_pinned from the pinned tag', async () => {
+    const { db, args } = syncDb()
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-public', 'blog-pinned'])
+    const insert = args.find((a) => a.includes('public'))
+    expect(insert).toBeDefined()
+    expect(insert?.[5]).toBe(1)
+  })
+
+  it('clears is_pinned when the pinned tag is removed', async () => {
+    const { db, args } = syncDb({ existingSlug: 'keep-me' })
+    await syncBlogPost(db as unknown as D1Database, 'u1', 'n1', ['blog-public'])
+    const update = args[args.length - 1]
+    expect(update?.[2]).toBe(0)
+  })
+
   it('withdrawBlogPost deletes only the post row', async () => {
     const { db, sqls } = syncDb()
     await withdrawBlogPost(db as unknown as D1Database, 'u1', 'n1')

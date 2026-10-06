@@ -3,7 +3,7 @@ import { blogApi, BlogAuthError, type BlogMeta } from './api'
 import { BlogHeader } from './components/header'
 import { BlogFooter } from './components/footer'
 import { t } from '../lib/i18n'
-import { MOMENTS_TAG } from '@shared/blog/tags'
+import { MOMENTS_TAG, PINNED_TAG } from '@shared/blog/tags'
 import { initialBlogTheme, saveBlogTheme, dispatchBlogTheme, type BlogTheme } from './theme'
 import './styles.css'
 
@@ -148,7 +148,7 @@ export default function BlogApp({ username }: {
   // index; the private tag stays visible as a locked-content reminder.
   const hiddenTags = !meta || Component === TagsPage
     ? []
-    : [meta.publicTag, meta.momentsTag ?? MOMENTS_TAG]
+    : [meta.publicTag, meta.momentsTag ?? MOMENTS_TAG, meta.pinnedTag ?? PINNED_TAG]
 
   return (
     <div ref={appRef} className="blog-app" data-theme={theme} data-accent={meta?.accent || undefined}>

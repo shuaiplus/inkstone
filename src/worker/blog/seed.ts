@@ -1,4 +1,4 @@
-﻿import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG, blogEntryOfTags } from '@shared/blog/tags'
+﻿import { BLOG_PRIVATE_TAG, BLOG_PUBLIC_TAG, MOMENTS_TAG, PINNED_TAG, blogEntryOfTags, isPinnedTag } from '@shared/blog/tags'
 import { getMeta, setMeta } from '../db/metadata'
 import { LEGACY_BLOG_SESSION_PREFIX } from './settings'
 import { resyncBlogPosts } from './publish'
@@ -100,6 +100,7 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
     publicTag: publicTag || BLOG_PUBLIC_TAG,
     privateTag: privateTag || BLOG_PRIVATE_TAG,
     momentsTag: MOMENTS_TAG,
+    pinnedTag: PINNED_TAG,
   }
   const { results: shares } = await db
     .prepare(
@@ -120,15 +121,16 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
       )
       .bind(share.note_id, userId)
       .all<{ name: string }>()
-    const entry = blogEntryOfTags(tagRows.map((row) => row.name), config)
+    const names = tagRows.map((row) => row.name)
+    const entry = blogEntryOfTags(names, config)
     if (!entry) continue
     await db
       .prepare(
         `INSERT OR IGNORE INTO blog_posts
-          (user_id, note_id, slug, visibility, kind, is_pinned, pinned_at, published_at, created_at, updated_at)
-          VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, ?6, ?7, ?8)`,
+          (user_id, note_id, slug, visibility, kind, is_pinned, published_at, created_at, updated_at)
+          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
       )
-      .bind(userId, share.note_id, share.slug, entry.tier, entry.kind, share.created_at, share.created_at, now)
+      .bind(userId, share.note_id, share.slug, entry.tier, entry.kind, isPinnedTag(names, config) ? 1 : 0, share.created_at, share.created_at, now)
       .run()
   }
 }
@@ -140,18 +142,28 @@ async function seedUserPosts(db: D1Database, userId: string): Promise<void> {
  * break init because the columns are unused dead weight.
  */
 export async function dropLegacyBlogColumns(db: D1Database): Promise<void> {
-  const { results } = await db
-    .prepare(`PRAGMA table_info(blog_settings)`)
-    .all<{ name: string }>()
-  const present = new Set(results.map((row) => row.name))
-  const legacy = ['public_tag', 'private_tag', 'moments_public_tag', 'moments_private_tag', 'moments_folder']
-  for (const column of legacy) {
+  const targets: ReadonlyArray<readonly string[]> = [
+    ['blog_settings', 'public_tag'],
+    ['blog_settings', 'private_tag'],
+    ['blog_settings', 'moments_public_tag'],
+    ['blog_settings', 'moments_private_tag'],
+    ['blog_settings', 'moments_folder'],
+    ['blog_posts', 'pinned_at'],
+  ]
+  const seen = new Map<string, Set<string>>()
+  for (const [table, column] of targets) {
+    let present = seen.get(table)
+    if (!present) {
+      const { results } = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>()
+      present = new Set(results.map((row) => row.name))
+      seen.set(table, present)
+    }
     if (!present.has(column)) continue
     try {
-      await db.prepare(`ALTER TABLE blog_settings DROP COLUMN ${column}`).run()
+      await db.prepare(`ALTER TABLE ${table} DROP COLUMN ${column}`).run()
       present.delete(column)
     } catch (error) {
-      console.warn(`[inkstone] Skipping DROP COLUMN blog_settings.${column}:`, error instanceof Error ? error.message : error)
+      console.warn(`[inkstone] Skipping DROP COLUMN ${table}.${column}:`, error instanceof Error ? error.message : error)
     }
   }
 }

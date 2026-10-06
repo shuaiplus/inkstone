@@ -1,4 +1,4 @@
-import { blogEntryOfTags, type BlogKind, type BlogTier } from '@shared/blog/tags'
+import { blogEntryOfTags, isPinnedTag, type BlogKind, type BlogTier } from '@shared/blog/tags'
 import { newSlug } from '../lib/id'
 import { splitTags } from '../db/rows'
 import { getBlogSettings, type BlogSettings } from './settings'
@@ -9,17 +9,19 @@ export async function ensureBlogPost(
   noteId: string,
   tier: Exclude<BlogTier, 'none'>,
   kind: BlogKind,
+  pinned: boolean,
 ): Promise<void> {
   const existing = await db
-    .prepare(`SELECT slug FROM blog_posts WHERE user_id = ?1 AND note_id = ?2`)
+    .prepare(`SELECT slug, is_pinned FROM blog_posts WHERE user_id = ?1 AND note_id = ?2`)
     .bind(userId, noteId)
-    .first<{ slug: string }>()
+    .first<{ slug: string; is_pinned: number }>()
   const now = Date.now()
+  const pinnedValue = pinned ? 1 : 0
   if (existing) {
-    // Slug and published_at stay frozen; only visibility/kind move.
+    // Slug and published_at stay frozen; only visibility/kind/pin move.
     await db
-      .prepare(`UPDATE blog_posts SET visibility = ?1, kind = ?2, updated_at = ?3 WHERE user_id = ?4 AND note_id = ?5`)
-      .bind(tier, kind, now, userId, noteId)
+      .prepare(`UPDATE blog_posts SET visibility = ?1, kind = ?2, is_pinned = ?3, updated_at = ?4 WHERE user_id = ?5 AND note_id = ?6`)
+      .bind(tier, kind, pinnedValue, now, userId, noteId)
       .run()
     return
   }
@@ -28,10 +30,10 @@ export async function ensureBlogPost(
       await db
         .prepare(
           `INSERT INTO blog_posts
-            (user_id, note_id, slug, visibility, kind, is_pinned, pinned_at, published_at, created_at, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, ?6, ?7, ?8)`,
+            (user_id, note_id, slug, visibility, kind, is_pinned, published_at, created_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
         )
-        .bind(userId, noteId, newSlug(), tier, kind, now, now, now)
+        .bind(userId, noteId, newSlug(), tier, kind, pinnedValue, now, now, now)
         .run()
       return
     } catch (error) {
@@ -44,19 +46,19 @@ export async function ensureBlogPost(
   // row so the visibility/kind change is never silently dropped.
   const updated = await db
     .prepare(
-      `UPDATE blog_posts SET slug = ?1, visibility = ?2, kind = ?3, updated_at = ?4
-        WHERE user_id = ?5 AND note_id = ?6`,
+      `UPDATE blog_posts SET slug = ?1, visibility = ?2, kind = ?3, is_pinned = ?4, updated_at = ?5
+        WHERE user_id = ?6 AND note_id = ?7`,
     )
-    .bind(`${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, Date.now(), userId, noteId)
+    .bind(`${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, pinnedValue, Date.now(), userId, noteId)
     .run()
   if (!updated.meta.changes) {
     await db
       .prepare(
         `INSERT OR IGNORE INTO blog_posts
-          (user_id, note_id, slug, visibility, kind, is_pinned, pinned_at, published_at, created_at, updated_at)
-          VALUES (?1, ?2, ?3, ?4, ?5, 0, NULL, ?6, ?7, ?8)`,
+          (user_id, note_id, slug, visibility, kind, is_pinned, published_at, created_at, updated_at)
+          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
       )
-      .bind(userId, noteId, `${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, now, now, now)
+      .bind(userId, noteId, `${newSlug()}-${noteId.slice(0, 8)}`, tier, kind, pinnedValue, now, now, now)
       .run()
   }
 }
@@ -86,7 +88,7 @@ export async function syncBlogPost(
     await withdrawBlogPost(db, userId, noteId)
     return
   }
-  await ensureBlogPost(db, userId, noteId, entry.tier, entry.kind)
+  await ensureBlogPost(db, userId, noteId, entry.tier, entry.kind, isPinnedTag(tags, settings))
 }
 
 /**
