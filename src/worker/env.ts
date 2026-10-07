@@ -37,6 +37,8 @@ export interface DatabaseState {
 export interface Variables {
 
   database: DatabaseState
+  blogOwnerId?: string
+  blogAuthed?: boolean
   userId: string
 
   sessionId: string

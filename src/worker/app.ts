@@ -14,6 +14,7 @@ import { avatarRoutes } from './routes/avatars'
 import { backupRoutes } from './routes/backup'
 import { settingsRoutes } from './routes/settings'
 import { shareManageRoutes, sharePageRoutes, shareRoutes } from './routes/share'
+import { blogRoutes } from './blog/routes'
 import { transferRoutes } from './routes/transfer'
 import { updateRoutes } from './routes/update'
 import { mcpAuthorizeRoutes } from './routes/mcp-authorize'
@@ -98,6 +99,7 @@ export function createApp() {
   app.route('/api/update', updateRoutes)
   app.route('/api/mcp', mcpSettingsRoutes)
   app.route('/api/share', shareManageRoutes)
+  app.route('/api/blog', blogRoutes)
   app.route('/api/public', shareRoutes)
   app.route('/api', transferRoutes)
 

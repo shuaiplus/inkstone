@@ -39,6 +39,14 @@ beforeEach(async () => {
       user_id TEXT PRIMARY KEY, enabled_at INTEGER, secret_ciphertext TEXT,
       recovery_generation TEXT, last_used_step INTEGER
     );
+    CREATE TABLE blog_settings (
+      user_id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '', password_hash TEXT NOT NULL,
+      public_tag TEXT NOT NULL DEFAULT 'blog-public',
+      private_tag TEXT NOT NULL DEFAULT 'blog-private',
+      moments_folder TEXT NOT NULL DEFAULT 'Moments',
+      created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    );
     INSERT INTO users VALUES ('user', 'old-hash');
     INSERT INTO totp_credentials VALUES ('user', 1, 'encrypted', 'generation', NULL);
   `)

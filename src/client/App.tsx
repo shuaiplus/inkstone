@@ -15,21 +15,43 @@ const AppShell = lazy(() =>
 const SharePage = lazy(() =>
   import('./features/share/SharePage').then((module) => ({ default: module.SharePage })),
 )
+const BlogApp = lazy(() => import('./blog/router'))
 
 export function App() {
 
   useLocale()
   const status = useSession((s) => s.status)
   const load = useSession((s) => s.load)
+  const [blogUsername, setBlogUsername] = useState<string | null>(() => {
+    const match = /^\/blog\/([A-Za-z0-9_-]+)/.exec(location.pathname)
+    return match?.[1] ?? null
+  })
   const [shareSlug] = useState(() => {
     const match = /^\/s\/([A-Za-z0-9_-]+)/.exec(location.pathname)
     return match?.[1] ?? null
   })
 
   useEffect(() => {
-    if (shareSlug) return
+    if (blogUsername) return
+    const isBlogRoot = /^\/blog\/?$/.test(location.pathname)
+    if (!isBlogRoot) return
+    let cancelled = false
+    fetch('/api/blog/owner', { headers: { 'X-Inkstone-Client': '1' } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.username) return
+        const target = `/blog/${encodeURIComponent(data.username)}`
+        window.history.replaceState(null, '', target)
+        setBlogUsername(data.username)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [blogUsername])
+
+  useEffect(() => {
+    if (shareSlug || blogUsername) return
     void load()
-  }, [load, shareSlug])
+  }, [load, shareSlug, blogUsername])
 
   useEffect(() => watchSystemTheme(), [])
 
@@ -38,18 +60,42 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (!shareSlug && status !== 'loading') requestOfflineWarmup()
-  }, [shareSlug, status])
+    if (!shareSlug && !blogUsername && status !== 'loading') requestOfflineWarmup()
+  }, [shareSlug, blogUsername, status])
 
   useEffect(() => {
-    if (shareSlug || status !== 'loading') dismissBootScreen()
-  }, [status, shareSlug])
+    if (shareSlug || blogUsername || status !== 'loading') dismissBootScreen()
+  }, [status, shareSlug, blogUsername])
 
   useEffect(() => {
-    if (shareSlug) return
+    if (shareSlug || blogUsername) return
     const timer = window.setTimeout(() => dismissBootScreen(), 8000)
     return () => window.clearTimeout(timer)
-  }, [shareSlug])
+  }, [shareSlug, blogUsername])
+
+  const isBlogRoot = /^\/blog\/?$/.test(location.pathname)
+
+  if (blogUsername) {
+    return (
+      <>
+        <ErrorBoundary>
+          <Suspense fallback={<PageFallback />}>
+            <BlogApp username={blogUsername} />
+          </Suspense>
+        </ErrorBoundary>
+        <Toaster />
+      </>
+    )
+  }
+
+  if (isBlogRoot) {
+    return (
+      <>
+        <PageFallback />
+        <Toaster />
+      </>
+    )
+  }
 
   if (shareSlug) {
     return (

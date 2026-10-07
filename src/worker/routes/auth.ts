@@ -14,6 +14,7 @@ import {
   type StoredAvatarObject,
 } from '../avatars/storage'
 import { seedWorkspace } from '../db/seed'
+import { trackAccountPasswordChange } from '../blog/settings'
 import { ApiError } from '../lib/errors'
 import { newId } from '../lib/id'
 import { getAllowRegistration } from '../lib/instance-settings'
@@ -352,6 +353,8 @@ authRoutes.post('/password', async (c) => {
           AND EXISTS (SELECT 1 FROM users WHERE id = ?1 AND password_hash = ?2)`,
     ).bind(user.id, newHash),
   ])
+  // Keep blog login tracking the account password (no-op for custom ones).
+  await trackAccountPasswordChange(db, user.id, expectedHash, newHash)
 
   if (!update.meta.changes) {
     throw new ApiError(409, 'conflict', 'Account credentials changed elsewhere. Refresh and try again')

@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { getCookie } from 'hono/cookie'
 import { LIMITS } from '@shared/constants'
 import { extractAttachmentIds } from '@shared/markdown-utils'
@@ -15,6 +15,9 @@ import {
   type AttachmentObjectStorage,
 } from '../attachments/keys'
 import { persistAttachmentWithinQuota } from '../attachments/storage'
+import { BLOG_SESSION_COOKIE, validateBlogSession } from '../blog/auth'
+import { checkBlogFileAccess } from '../blog/queries'
+import { getBlogSettings } from '../blog/settings'
 import type { AppBindings } from '../env'
 import { ApiError } from '../lib/errors'
 import { isValidId, isValidSlug, newId } from '../lib/id'
@@ -181,6 +184,11 @@ filesRoutes.post('/', requireAuth, async (c) => {
 })
 
 
+async function blogFileAccess(c: Context<AppBindings>, userId: string): Promise<boolean> {
+  const token = getCookie(c, BLOG_SESSION_COOKIE(userId))
+  return Boolean(token && (await validateBlogSession(c.env.DB, userId, token)))
+}
+
 filesRoutes.get('/:id', async (c) => {
   const id = c.req.param('id')
   if (!isValidId(id)) throw ApiError.notFound('Attachment not found')
@@ -197,26 +205,48 @@ filesRoutes.get('/:id', async (c) => {
   const userId = c.get('userId')
   let allowed = Boolean(userId && userId === row.user_id)
   if (!allowed && isValidSlug(shareSlug)) {
+    const settings = await getBlogSettings(c.env.DB, row.user_id)
     const share = await c.env.DB.prepare(
-      `SELECT s.slug, s.password_hash, n.content
+      `SELECT s.slug, s.password_hash,
+              (EXISTS (SELECT 1 FROM note_tags nt JOIN tags t ON t.id = nt.tag_id
+                        WHERE nt.note_id = s.note_id AND t.user_id = s.user_id AND t.name = ?4)) AS blog_private,
+              s.user_id, n.content
          FROM shares s
-         JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
-        WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
-          AND (s.expires_at IS NULL OR s.expires_at > ?3)`,
+          JOIN notes n ON n.id = s.note_id AND n.user_id = s.user_id
+         WHERE s.slug = ?1 AND s.user_id = ?2 AND n.deleted_at IS NULL
+           AND (s.expires_at IS NULL OR s.expires_at > ?3)`,
     )
-      .bind(shareSlug, row.user_id, Date.now())
-      .first<{ slug: string; password_hash: string | null; content: string }>()
+      .bind(shareSlug, row.user_id, Date.now(), settings.privateTag)
+      .first<{
+        slug: string
+        password_hash: string | null
+        blog_private: number
+        user_id: string
+        content: string
+      }>()
     allowed = Boolean(
       share &&
         extractAttachmentIds(share.content).includes(row.id) &&
-        (!share.password_hash ||
+        ((!share.password_hash ||
           (await verifyShareAssetSession(
             c.env.DB,
             getCookie(c, shareAssetCookieName(shareSlug)),
             share.slug,
             share.password_hash,
-          ))),
+          ))) ||
+          (share.blog_private === 1 && (await blogFileAccess(c, share.user_id)))),
     )
+    if (!share) {
+      // New-style blog slug (blog_posts.slug, no shares row): public posts
+      // are free, private posts need a blog session.
+      const blog = await checkBlogFileAccess(
+        c.env.DB,
+        shareSlug,
+        row.id,
+        await blogFileAccess(c, row.user_id),
+      )
+      allowed = blog.allowed
+    }
   }
   if (!allowed) throw ApiError.unauthenticated('You do not have access to this attachment')
 

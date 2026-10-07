@@ -1,5 +1,6 @@
 /** Defines the idempotent final D1 schema initialized by every Worker isolate. */
 import type { DatabaseState, Env } from '../env'
+import { dropLegacyBlogColumns, reseedMomentsClassification, seedBlogTables } from '../blog/seed'
 import { getMeta, setMeta } from './metadata'
 
 const BACKUP_ARCHIVES_TABLE = `CREATE TABLE IF NOT EXISTS backup_archives (
@@ -12,6 +13,42 @@ const BACKUP_ARCHIVES_TABLE = `CREATE TABLE IF NOT EXISTS backup_archives (
 )`
 const BACKUP_ARCHIVES_INDEX = `CREATE INDEX IF NOT EXISTS idx_backup_archives_retention
   ON backup_archives(user_id, target_id, destination, created_at DESC, archive_path DESC)`
+
+const BLOG_SETTINGS_TABLE = `CREATE TABLE IF NOT EXISTS blog_settings (
+  user_id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  password_hash TEXT NOT NULL,
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)`
+const BLOG_POSTS_TABLE = `CREATE TABLE IF NOT EXISTS blog_posts (
+  user_id TEXT NOT NULL,
+  note_id TEXT NOT NULL,
+  slug TEXT NOT NULL COLLATE NOCASE,
+  visibility TEXT NOT NULL CHECK (visibility IN ('public', 'private')),
+  kind TEXT NOT NULL DEFAULT 'article' CHECK (kind IN ('article', 'moment')),
+  is_pinned INTEGER NOT NULL DEFAULT 0 CHECK (is_pinned IN (0, 1)),
+  published_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, note_id)
+)`
+const BLOG_POSTS_SLUG_INDEX = `CREATE UNIQUE INDEX IF NOT EXISTS idx_blog_posts_slug
+  ON blog_posts(user_id, slug)`
+const BLOG_POSTS_FEED_INDEX = `CREATE INDEX IF NOT EXISTS idx_blog_posts_feed
+  ON blog_posts(user_id, visibility, is_pinned DESC, published_at DESC, note_id DESC)`
+const BLOG_POSTS_MOMENTS_INDEX = `CREATE INDEX IF NOT EXISTS idx_blog_posts_moments
+  ON blog_posts(user_id, kind, visibility, published_at DESC)`
+const BLOG_SESSIONS_TABLE = `CREATE TABLE IF NOT EXISTS blog_sessions (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+)`
+const BLOG_SESSIONS_USER_INDEX = `CREATE INDEX IF NOT EXISTS idx_blog_sessions_user
+  ON blog_sessions(user_id, expires_at)`
 
 export const SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS app_meta (
@@ -204,6 +241,13 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_shares_note ON shares(note_id)`,
   `CREATE INDEX IF NOT EXISTS idx_shares_user_created ON shares(user_id, created_at DESC, slug DESC)`,
+  BLOG_SETTINGS_TABLE,
+  BLOG_POSTS_TABLE,
+  BLOG_POSTS_SLUG_INDEX,
+  BLOG_POSTS_FEED_INDEX,
+  BLOG_POSTS_MOMENTS_INDEX,
+  BLOG_SESSIONS_TABLE,
+  BLOG_SESSIONS_USER_INDEX,
 
   `CREATE TABLE IF NOT EXISTS share_asset_sessions (
     id TEXT PRIMARY KEY,
@@ -348,13 +392,13 @@ export const SCHEMA_STATEMENTS: readonly string[] = [
      ON fts_index_queue(user_id, created_at, note_id)`,
 ]
 
-interface SchemaMigration {
+export interface SchemaMigration {
   version: number
   statements: readonly string[]
   skipIfColumnExists?: { table: string; column: string }
 }
 
-const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
+export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   {
     // Explicit whitelist (not a regex over SCHEMA_STATEMENTS) so later
     // additions like mcp_api_keys can never be picked up accidentally.
@@ -537,6 +581,38 @@ const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
     version: 13,
     statements: [BACKUP_ARCHIVES_TABLE, BACKUP_ARCHIVES_INDEX],
   },
+  {
+    version: 14,
+    statements: [
+      BLOG_SETTINGS_TABLE,
+      BLOG_POSTS_TABLE,
+      BLOG_POSTS_SLUG_INDEX,
+      BLOG_POSTS_FEED_INDEX,
+      BLOG_POSTS_MOMENTS_INDEX,
+      BLOG_SESSIONS_TABLE,
+      BLOG_SESSIONS_USER_INDEX,
+    ],
+  },
+  {
+    version: 15,
+    skipIfColumnExists: { table: 'blog_settings', column: 'moments_public_tag' },
+    statements: [
+      `ALTER TABLE blog_settings ADD COLUMN moments_public_tag TEXT NOT NULL DEFAULT 'moment-public'`,
+      `ALTER TABLE blog_settings ADD COLUMN moments_private_tag TEXT NOT NULL DEFAULT 'moment-private'`,
+    ],
+  },
+  {
+    version: 16,
+    // Fresh installs already get settings_json from the base table
+    // definition above; skip the whole migration in that case (the ADD
+    // would fail as duplicate). Dropped columns are handled by
+    // dropLegacyBlogColumns instead, which is conditional per column.
+    skipIfColumnExists: { table: 'blog_settings', column: 'settings_json' },
+    statements: [
+      `ALTER TABLE blog_settings ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}'`,
+      `UPDATE blog_settings SET settings_json = json_object('publicTag', public_tag, 'privateTag', private_tag, 'momentsTag', 'moment')`,
+    ],
+  },
 ]
 
 const FTS_STATEMENT = `CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -573,6 +649,9 @@ const REQUIRED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   backup_archives: ['user_id', 'target_id', 'destination', 'archive_path', 'created_at'],
   backup_runs: ['id', 'user_id', 'trigger', 'status', 'started_at', 'finished_at', 'note_count', 'file_count', 'bytes', 'detail'],
   shares: ['slug', 'note_id', 'user_id', 'password_hash', 'expires_at', 'views', 'created_at'],
+  blog_settings: ['user_id', 'title', 'description', 'password_hash', 'settings_json', 'created_at', 'updated_at'],
+  blog_posts: ['user_id', 'note_id', 'slug', 'visibility', 'kind', 'is_pinned', 'published_at', 'created_at', 'updated_at'],
+  blog_sessions: ['token', 'user_id', 'expires_at', 'created_at'],
   share_asset_sessions: ['id', 'slug', 'password_hash', 'expires_at', 'created_at'],
   changes: ['seq', 'user_id', 'entity', 'entity_id', 'op', 'at'],
   sessions: ['id', 'user_id', 'expires_at', 'created_at'],
@@ -605,6 +684,9 @@ const REQUIRED_TABLES = [
   'backup_archives',
   'backup_runs',
   'shares',
+  'blog_settings',
+  'blog_posts',
+  'blog_sessions',
   'share_asset_sessions',
   'changes',
   'sessions',
@@ -647,6 +729,10 @@ const REQUIRED_INDEXES = [
   'idx_runs_user',
   'idx_shares_note',
   'idx_shares_user_created',
+  'idx_blog_posts_slug',
+  'idx_blog_posts_feed',
+  'idx_blog_posts_moments',
+  'idx_blog_sessions_user',
   'idx_share_asset_sessions_slug',
   'idx_share_asset_sessions_expires',
   'idx_changes_user',
@@ -695,6 +781,12 @@ async function createSchema(db: D1Database): Promise<DatabaseState> {
     await db.batch(TABLE_SCHEMA_STATEMENTS.map((statement) => db.prepare(statement)))
   }
   await applyMigrations(db)
+  // Blog backfill shares the init path so every isolate (worker, cron,
+  // tests) converges: tables exist at this point on fresh and upgraded
+  // installs alike, and the seed is idempotent via marker.
+  await seedBlogTables(db)
+  await dropLegacyBlogColumns(db)
+  await reseedMomentsClassification(db)
   if (initialized) {
     await db.batch(INDEX_SCHEMA_STATEMENTS.map((statement) => db.prepare(statement)))
   }
