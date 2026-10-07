@@ -1,4 +1,4 @@
-import { StateEffect, StateField, type EditorState, type Extension, type Range } from '@codemirror/state';
+import { RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
 import { parseWikiTarget, renderMarkdownBlocks, type Heading, type MarkdownBlock } from '../lib/markdown/renderer';
@@ -10,6 +10,7 @@ import { decodeDataValue } from '../lib/markdown/data-attr';
 import { findNoteByTitle, useNotes } from '../store/notes';
 import { useUi } from '../store/ui';
 import { selectMarkdownTab, moveMarkdownTabFocus } from '../features/preview/markdown-tabs';
+import { computeLiveDecorations, type LiveDecorations } from './live-markers';
 
 const focusChanged = StateEffect.define<boolean>();
 const refresh = StateEffect.define<boolean>();
@@ -102,27 +103,134 @@ class RenderedBlock extends WidgetType {
 }
 const cleanup = new WeakMap<HTMLElement, () => void>();
 
+class MarkerWidget extends WidgetType {
+    constructor(readonly marker: string, readonly ordered: boolean) { super(); }
+    eq(other: MarkerWidget) { return other.marker === this.marker && other.ordered === this.ordered; }
+    toDOM() {
+        const span = document.createElement('span');
+        span.className = 'cm-live-marker';
+        span.textContent = this.ordered ? `${this.marker} ` : '\u2022';
+        span.setAttribute('aria-hidden', 'true');
+        return span;
+    }
+}
+
+class CheckboxWidget extends WidgetType {
+    constructor(readonly checked: boolean) { super(); }
+    eq(other: CheckboxWidget) { return other.checked === this.checked; }
+    toDOM() {
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.className = 'cm-live-checkbox';
+        input.checked = this.checked;
+        input.setAttribute('data-task-toggle', '');
+        input.setAttribute('aria-label', this.checked ? t('markdown.mark_incomplete') : t('markdown.mark_complete'));
+        return input;
+    }
+    ignoreEvent() { return false; }
+}
+
+class RuleWidget extends WidgetType {
+    eq() { return true; }
+    toDOM() {
+        const rule = document.createElement('div');
+        rule.className = 'cm-live-rule';
+        rule.setAttribute('aria-hidden', 'true');
+        return rule;
+    }
+}
+
+class ImageWidget extends WidgetType {
+    constructor(readonly src: string, readonly alt: string) { super(); }
+    eq(other: ImageWidget) { return other.src === this.src && other.alt === this.alt; }
+    toDOM() {
+        const image = document.createElement('img');
+        image.className = 'cm-live-image';
+        image.src = this.src;
+        image.alt = this.alt;
+        image.loading = 'lazy';
+        return image;
+    }
+    ignoreEvent() { return false; }
+}
+
 interface LiveState {
     blocks: MarkdownBlock[];
     headings: Heading[];
-    decorations: DecorationSet;
-    focused: boolean;
+    source: string;
+    title: string;
     revision: number;
+    focused: boolean;
 }
 
-function decorate(state: EditorState, live: LiveState, title: string): DecorationSet {
-    const ranges: Range<Decoration>[] = [];
-    const source = state.doc.toString();
-    for (const block of live.blocks) {
-        if (block.startLine >= state.doc.lines || block.endLine <= block.startLine) continue;
-        const from = state.doc.line(block.startLine + 1).from;
-        const to = state.doc.line(Math.min(block.endLine, state.doc.lines)).to;
-        const active = state.selection.ranges.some((range) =>
-            (live.focused || !range.empty) && range.from <= to && range.to >= from);
-        if (active || from === to) continue;
-        ranges.push(Decoration.replace({ block: true, widget: new RenderedBlock(block, source, live.revision, title) }).range(from, to));
+function widgetFor(decoration: LiveDecorations['replaces'][number]): WidgetType {
+    switch (decoration.kind) {
+        case 'ordered':
+        case 'bullet': return new MarkerWidget(decoration.marker ?? '-', decoration.kind === 'ordered');
+        case 'checkbox': return new CheckboxWidget(decoration.checked === true);
+        case 'rule': return new RuleWidget();
+        case 'image': return new ImageWidget(decoration.src ?? '', decoration.alt ?? '');
     }
-    return Decoration.set(ranges, true);
+}
+
+interface Taken { from: number; to: number }
+
+function overlapsTaken(taken: Taken[], from: number, to: number): boolean {
+    return taken.some((range) => range.from < to && range.to > from);
+}
+
+function buildDecorations(state: EditorState, live: LiveState, viewport: { from: number; to: number }, caretLines: Set<number>): DecorationSet {
+    const doc = state.doc;
+    const geometry = computeLiveDecorations(doc, syntaxTree(state), caretLines, viewport);
+    const builder: RangeSetBuilder<Decoration> = new RangeSetBuilder<Decoration>();
+    const contributions: { from: number; to: number; decoration: Decoration }[] = [];
+    const taken: Taken[] = [];
+
+    const blocksByLine = new Map(live.blocks.map((block) => [block.startLine, block]));
+
+    for (const opaque of geometry.opaque) {
+        const firstLine = doc.lineAt(opaque.from).number;
+        const lastLine = doc.lineAt(Math.min(opaque.to, doc.length)).number;
+        let active = false;
+        for (let line = firstLine; line <= lastLine; line += 1) if (caretLines.has(line)) { active = true; break; }
+        if (active) continue;
+        const block = blocksByLine.get(firstLine - 1);
+        if (!block) continue;
+        const from = doc.line(firstLine).from;
+        const to = doc.line(Math.min(block.endLine, doc.lines)).to;
+        if (overlapsTaken(taken, from, to)) continue;
+        taken.push({ from, to });
+        contributions.push({ from, to, decoration: Decoration.replace({ block: true, widget: new RenderedBlock(block, live.source, live.revision, live.title) }) });
+    }
+
+    for (const range of geometry.hide) {
+        if (range.to <= range.from || overlapsTaken(taken, range.from, range.to)) continue;
+        taken.push({ from: range.from, to: range.to });
+        contributions.push({ from: range.from, to: range.to, decoration: Decoration.replace({}) });
+    }
+    for (const replace of geometry.replaces) {
+        if (replace.to <= replace.from || overlapsTaken(taken, replace.from, replace.to)) continue;
+        taken.push({ from: replace.from, to: replace.to });
+        contributions.push({
+            from: replace.from,
+            to: replace.to,
+            decoration: Decoration.replace({ widget: widgetFor(replace) }),
+        });
+    }
+    for (const mark of geometry.marks) {
+        if (mark.to <= mark.from) continue;
+        contributions.push({ from: mark.from, to: mark.to, decoration: Decoration.mark({ class: mark.className }) });
+    }
+    const lineSeen = new Set<number>();
+    for (const line of geometry.lines) {
+        if (lineSeen.has(line.line) || line.line > doc.lines) continue;
+        lineSeen.add(line.line);
+        contributions.push({ from: doc.line(line.line).from, to: doc.line(line.line).from, decoration: Decoration.line({ class: line.classes }) });
+    }
+
+    contributions.sort((a, b) => a.from - b.from || a.to - b.to);
+    for (const contribution of contributions) builder.add(contribution.from, contribution.to, contribution.decoration);
+    return builder.finish();
 }
 
 /** Decorations change presentation only; all editing, undo, search and saving use Markdown. */
@@ -130,34 +238,24 @@ export function livePreview(onHeadings: (headings: Heading[]) => void, getTitle:
     const field = StateField.define<LiveState>({
         create(state) {
             const result = renderMarkdownBlocks(state.doc.toString());
-            const value: LiveState = { ...result, decorations: Decoration.none, focused: false, revision: 0 };
-            value.decorations = decorate(state, value, getTitle());
-            return value;
+            return { ...result, source: state.doc.toString(), title: getTitle(), revision: 0, focused: false };
         },
-        update(value, tr) {
-            const focused = tr.effects.find((effect) => effect.is(focusChanged));
-            const refreshed = tr.effects.find((effect) => effect.is(refresh));
-            if (!tr.docChanged && !tr.selection && !focused && !refreshed) return value;
-            // Keep typing synchronous and cheap. Reparse after a short idle window; never
-            // display stale HTML for a block whose source was touched in the meantime.
-            const mapped = tr.docChanged ? value.blocks.flatMap((block) => {
-                const from = tr.startState.doc.line(block.startLine + 1).from;
-                const to = tr.startState.doc.line(Math.min(block.endLine, tr.startState.doc.lines)).to;
-                if (tr.changes.touchesRange(from, to)) return [];
-                const startLine = tr.state.doc.lineAt(tr.changes.mapPos(from, 1)).number - 1;
-                const delta = startLine - block.startLine;
-                return [{ ...block, startLine,
-                    html: delta ? block.html.replace(/(data-(?:task-)?line=")(\d+)(")/g, (_, before, line, after) => `${before}${Number(line) + delta}${after}`) : block.html,
-                    endLine: tr.state.doc.lineAt(tr.changes.mapPos(to, -1)).number }];
-            }) : value.blocks;
-            const next = { ...value, blocks: mapped, ...(refreshed ? renderMarkdownBlocks(tr.state.doc.toString()) : {}),
-                focused: focused ? focused.value : value.focused, revision: value.revision + (refreshed?.value ? 1 : 0) };
-            next.decorations = decorate(tr.state, next, getTitle());
-            return next;
+        update(value, transaction) {
+            const focused = transaction.effects.find((effect) => effect.is(focusChanged));
+            const refreshed = transaction.effects.find((effect) => effect.is(refresh));
+            if (!transaction.docChanged && !focused && !refreshed) return value;
+            return {
+                ...value,
+                ...(refreshed ? renderMarkdownBlocks(transaction.state.doc.toString()) : {}),
+                source: transaction.state.doc.toString(),
+                title: getTitle(),
+                revision: value.revision + (refreshed?.value ? 1 : 0),
+                focused: focused ? focused.value : value.focused,
+            };
         },
-        provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
     });
     return [field, ViewPlugin.fromClass(class {
+        decorations: DecorationSet = Decoration.none;
         timer = 0;
         parseTimer = 0;
         observer: MutationObserver;
@@ -172,35 +270,50 @@ export function livePreview(onHeadings: (headings: Heading[]) => void, getTitle:
             this.unsubscribe = useSession.subscribe((state, previous) => {
                 if (state.settings.preview !== previous.settings.preview || state.settings.appearance !== previous.settings.appearance) refreshView();
             });
+            this.build(view);
             queueMicrotask(() => { const value = view.state.field(field, false); if (value) onHeadings(value.headings); });
         }
-        update(update: { docChanged: boolean; state: EditorState }) {
+        build(view: EditorView) {
+            const state = view.state;
+            const caretLines = new Set<number>();
+            for (const range of state.selection.ranges) {
+                caretLines.add(state.doc.lineAt(range.from).number);
+                caretLines.add(state.doc.lineAt(range.to).number);
+            }
+            const visible = view.visibleRanges;
+            const from = visible.length ? visible[0]!.from : 0;
+            const to = visible.length ? visible[visible.length - 1]!.to : state.doc.length;
+            this.decorations = buildDecorations(state, state.field(field), { from, to }, caretLines);
+        }
+        update(update: { docChanged: boolean; selectionSet: boolean; viewportChanged: boolean; state: EditorState; startState: EditorState; view: EditorView }) {
             if (update.docChanged) {
                 clearTimeout(this.parseTimer);
                 this.parseTimer = window.setTimeout(() => this.view.dispatch({ effects: refresh.of(false) }), 90);
             }
+            const markersChanged = update.startState.field(field) !== update.state.field(field);
+            if (update.docChanged || update.selectionSet || update.viewportChanged || markersChanged) this.build(update.view);
             const headings = update.state.field(field).headings;
             queueMicrotask(() => { if (this.view.state.field(field, false)) onHeadings(headings); });
         }
         destroy() { clearTimeout(this.timer); clearTimeout(this.parseTimer); this.observer.disconnect(); this.unsubscribe(); }
-    }), EditorView.domEventHandlers({
+    }, { decorations: (plugin) => plugin.decorations }), EditorView.domEventHandlers({
         focus(_event, view) { view.dispatch({ effects: focusChanged.of(true) }); },
         blur(_event, view) { view.dispatch({ effects: focusChanged.of(false) }); },
+        mousedown(event, view) {
+            const box = (event.target as HTMLElement).closest<HTMLInputElement>('[data-task-toggle]');
+            if (!box) return false;
+            event.preventDefault();
+            const pos = view.posAtDOM(box);
+            const line = view.state.doc.lineAt(pos);
+            const match = /\[([ xX])\]/.exec(line.text.slice(Math.max(0, pos - line.from - 1)));
+            if (!match) return true;
+            const at = line.from + Math.max(0, pos - line.from - 1) + match.index + 1;
+            view.dispatch({ changes: { from: at, to: at + 1, insert: match[1] === ' ' ? 'x' : ' ' }, userEvent: 'input' });
+            return true;
+        },
     }), EditorView.baseTheme({
         '.cm-live-strong': { fontWeight: '700' },
         '.cm-live-em': { fontStyle: 'italic' },
-        '.cm-live-heading': { fontSize: '1.35em', fontWeight: '650' },
-    }), ViewPlugin.fromClass(class {
-        decorations: DecorationSet = Decoration.none;
-        constructor(view: EditorView) { this.build(view); }
-        update(update: { view: EditorView }) { this.build(update.view); }
-        build(view: EditorView) {
-            const ranges: Range<Decoration>[] = [];
-            for (const { from, to } of view.visibleRanges) syntaxTree(view.state).iterate({ from, to, enter(node) {
-                const cls = node.name === 'StrongEmphasis' ? 'cm-live-strong' : node.name === 'Emphasis' ? 'cm-live-em' : /^ATXHeading/.test(node.name) ? 'cm-live-heading' : '';
-                if (cls) ranges.push(Decoration.mark({ class: cls }).range(node.from, node.to));
-            } });
-            this.decorations = Decoration.set(ranges, true);
-        }
-    }, { decorations: (plugin) => plugin.decorations })];
+        '.cm-live-strike': { textDecoration: 'line-through' },
+    })];
 }

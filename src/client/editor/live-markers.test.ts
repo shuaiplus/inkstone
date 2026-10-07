@@ -9,7 +9,6 @@ function run(source: string, caretLines: number[] = []) {
     return computeLiveDecorations(doc, tree, new Set(caretLines), { from: 0, to: doc.length });
 }
 
-/** Slice helper: the visible text once hidden and replaced ranges are removed. */
 function visible(source: string, result: ReturnType<typeof run>): string {
     const hidden = [...result.hide, ...result.replaces].sort((a, b) => a.from - b.from);
     let output = '';
@@ -38,12 +37,12 @@ describe('live markers: headings', () => {
 });
 
 describe('live markers: callouts', () => {
-    const source = ['> [!danger] 账号 · 密钥 · 资产', '> - item a', '> - item b'].join('\n');
+    const source = ['> [!danger] Account secrets', '> - item a', '> - item b'].join('\n');
 
     it('hides the marker and the quote prefixes while keeping the title', () => {
         const result = run(source);
         const text = visible(source, result);
-        expect(text).toContain('账号 · 密钥 · 资产');
+        expect(text).toContain('Account secrets');
         expect(text).not.toContain('[!danger]');
         expect(text).not.toContain('>');
     });

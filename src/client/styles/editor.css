@@ -446,6 +446,77 @@
 .ink-editor .cm-live-block img { max-width: 100%; }
 .ink-editor .cm-live-block table { display: block; overflow-x: auto; }
 .ink-editor .cm-live-block pre { overflow-x: auto; }
+
+/* Token-level live preview. Markers are hidden in place instead of replacing the block,
+   so the editor keeps the rendered look while the caret, undo and saving stay on Markdown. */
+.cm-live-marker {
+  color: var(--list-marker, var(--text-tertiary));
+  font-weight: 600;
+  margin-inline-end: 0.35em;
+}
+.cm-live-checkbox {
+  vertical-align: middle;
+  margin-inline-end: 0.35em;
+  accent-color: var(--accent);
+}
+.cm-live-rule {
+  display: block;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0.55em 0;
+}
+.cm-live-image {
+  display: block;
+  max-width: 100%;
+  border-radius: var(--r-md);
+  margin: 0.4em 0;
+}
+.cm-live-link {
+  color: var(--accent);
+}
+.cm-live-code {
+  background: var(--bg-inset);
+  border-radius: var(--r-xs);
+  padding: 0.02em 0.28em;
+  font-family: var(--font-mono);
+}
+.cm-line.cm-live-heading {
+  font-weight: 650;
+}
+.cm-line.cm-live-h1 { font-size: 1.7em; line-height: 1.3; }
+.cm-line.cm-live-h2 { font-size: 1.42em; line-height: 1.35; }
+.cm-line.cm-live-h3 { font-size: 1.22em; line-height: 1.4; }
+.cm-line.cm-live-h4 { font-size: 1.1em; }
+.cm-line.cm-live-h5 { font-size: 1em; }
+.cm-line.cm-live-h6 {
+  font-size: 0.94em;
+  color: var(--text-secondary);
+}
+.cm-line.cm-live-quote {
+  --cm-live-callout: var(--accent);
+  border-left: 3px solid var(--cm-live-callout);
+  background: color-mix(in oklab, var(--cm-live-callout) 6%, var(--bg-inset));
+  padding-inline-start: 21px;
+}
+.cm-line.cm-live-quote-first {
+  border-top-left-radius: var(--r-md);
+  border-top-right-radius: var(--r-md);
+  padding-top: 0.4em;
+}
+.cm-line.cm-live-quote-last {
+  border-bottom-left-radius: var(--r-md);
+  border-bottom-right-radius: var(--r-md);
+  padding-bottom: 0.4em;
+}
+.cm-line.cm-live-callout-warning,
+.cm-line.cm-live-callout-question { --cm-live-callout: var(--warning); }
+.cm-line.cm-live-callout-danger,
+.cm-line.cm-live-callout-failure { --cm-live-callout: var(--danger); }
+.cm-line.cm-live-callout-success,
+.cm-line.cm-live-callout-tip { --cm-live-callout: var(--success); }
+.cm-live-quote-title {
+  color: var(--cm-live-callout, var(--accent));
+  font-weight: 650;
+}
 @media (max-width: 767px) {
   .ink-editor .cm-editor { font-size: max(16px, var(--editor-size, 15px)); }
   [data-editor-layout='split'] > div { min-height: 0; }
