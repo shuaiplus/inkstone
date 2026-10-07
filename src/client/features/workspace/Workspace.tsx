@@ -236,7 +236,7 @@ export function Workspace({ onMobileBack, pane = 'active', grouped = false, }: {
         if (!view)
             return;
         command(view);
-        view.focus();
+        if (!view.dom.querySelector('.ink-note-search')?.contains(document.activeElement)) view.focus();
     }, [view]);
     const invalidateSyncAnchors = useSyncScroll(view, previewScrollerRef, settings.preview.syncScroll && showSplit);
     const jumpToHeading = useCallback((heading: Heading) => {

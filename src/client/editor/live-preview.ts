@@ -1,6 +1,7 @@
 import { StateEffect, StateField, type EditorState, type Extension, type Range } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
+import { searchPanelOpen } from '@codemirror/search';
 import { parseWikiTarget, renderMarkdownBlocks, type Heading, type MarkdownBlock } from '../lib/markdown/renderer';
 import { enhancePreview, renderPendingMermaid, toggleCodeBlockCollapse } from '../lib/markdown/enhance';
 import { resolveNoteEmbeds } from '../lib/markdown/embeds';
@@ -111,6 +112,7 @@ interface LiveState {
 }
 
 function decorate(state: EditorState, live: LiveState, title: string): DecorationSet {
+    if (searchPanelOpen(state)) return Decoration.none;
     const ranges: Range<Decoration>[] = [];
     const source = state.doc.toString();
     for (const block of live.blocks) {
@@ -137,7 +139,8 @@ export function livePreview(onHeadings: (headings: Heading[]) => void, getTitle:
         update(value, tr) {
             const focused = tr.effects.find((effect) => effect.is(focusChanged));
             const refreshed = tr.effects.find((effect) => effect.is(refresh));
-            if (!tr.docChanged && !tr.selection && !focused && !refreshed) return value;
+            const searchChanged = searchPanelOpen(tr.startState) !== searchPanelOpen(tr.state);
+            if (!tr.docChanged && !tr.selection && !focused && !refreshed && !searchChanged) return value;
             // Keep typing synchronous and cheap. Reparse after a short idle window; never
             // display stale HTML for a block whose source was touched in the meantime.
             const mapped = tr.docChanged ? value.blocks.flatMap((block) => {

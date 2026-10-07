@@ -3,7 +3,7 @@ import { Annotation, Compartment, EditorState, type Extension } from '@codemirro
 import { EditorView, drawSelection, dropCursor, keymap, lineNumbers, placeholder as placeholderExt, rectangularSelection, } from '@codemirror/view';
 import { foldGutter, indentOnInput, indentUnit, } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { search, searchKeymap } from '@codemirror/search';
+import { searchKeymap } from '@codemirror/search';
 import { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, } from '@codemirror/autocomplete';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import type { EditorSettings } from '@shared/types';
@@ -15,6 +15,7 @@ import { pasteExtension, type PasteHandlers } from './paste';
 import { completeCodeFenceOnEnter, smartEnter, tableTab } from './commands';
 import { editorKeymap } from './shortcuts';
 import { livePreview } from './live-preview';
+import { noteSearch } from './search';
 import type { Heading } from '../lib/markdown/renderer';
 import { t } from "../lib/i18n";
 
@@ -73,7 +74,7 @@ export function CodeEditor({ value, live = false, noteTitle = '', onHeadings, on
                 placeholderExt(placeholder),
                 EditorView.contentAttributes.of({ 'aria-label': placeholder }),
             ]),
-            search({ top: true }),
+            noteSearch(),
             autocompletion({
                 override: [
 

@@ -1,6 +1,7 @@
 import type { Command, KeyBinding } from '@codemirror/view';
 import { redo, undo, moveLineUp, moveLineDown, deleteLine, indentMore, indentLess } from '@codemirror/commands';
-import { openSearchPanel, selectNextOccurrence } from '@codemirror/search';
+import { selectNextOccurrence } from '@codemirror/search';
+import { openFindPanel, openReplacePanel } from './search';
 import type { MessageKey } from '../lib/i18n';
 import { IS_MAC } from '../lib/hotkeys';
 import { codeMirrorKey } from '../lib/shortcuts';
@@ -35,7 +36,8 @@ export const EDITOR_SHORTCUTS: EditorShortcut[] = [
     { id: 'delete-line', combo: 'mod+shift+k', label: 'command.delete_line', run: deleteLine },
     { id: 'indent', combo: 'mod+]', label: 'command.indent', run: indentMore },
     { id: 'outdent', combo: 'mod+[', label: 'command.outdent', run: indentLess },
-    { id: 'find', combo: 'mod+f', label: 'command.find_and_replace_in_this_note', run: openSearchPanel },
+    { id: 'find', combo: 'mod+f', label: 'editor.search.find_in_note', run: openFindPanel },
+    { id: 'replace', combo: 'mod+h', label: 'editor.search.replace_in_note', run: openReplacePanel },
     { id: 'select-next', combo: 'mod+d', label: 'command.select_next_occurrence', run: selectNextOccurrence },
     { id: 'undo', combo: 'mod+z', label: 'common.undo', run: undo },
     { id: 'redo', combo: IS_MAC ? 'mod+shift+z' : 'mod+y', label: 'command.redo', run: redo },

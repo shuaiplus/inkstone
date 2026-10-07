@@ -1,12 +1,13 @@
 import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { EditorView } from '@codemirror/view';
-import { Blocks, Bold, Braces, ChevronDown, Code, FileText, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Quote, Sigma, Strikethrough, Table } from 'lucide-react';
+import { Blocks, Bold, Braces, ChevronDown, Code, FileText, Heading, Highlighter, Image as ImageIcon, Italic, Link2, List, ListOrdered, ListTodo, Quote, Search, Sigma, Strikethrough, Table } from 'lucide-react';
 import { IconButton } from '../../components/primitives';
 import { Menu, Tooltip, type MenuItem } from '../../components/overlay';
 import { cn } from '../../lib/cn';
 import { insertAdvancedCodeBlock, insertBlockId, insertCallout, insertCodeBlock, insertDetails, insertFootnote, insertFrontMatter, insertHorizontalRule, insertImage, insertLink, insertMathBlock, insertMermaid, insertTable, insertTabs, insertTag, setHeading, toggleBlockReference, toggleBold, toggleBulletList, toggleComment, toggleHighlight, toggleInlineCode, toggleInlineMath, toggleItalic, toggleNoteEmbed, toggleOrderedList, toggleQuote, toggleStrikethrough, toggleTaskList, toggleWikiLink } from '../../editor/commands';
 import { t } from '../../lib/i18n';
 import { editorCombo } from '../../editor/shortcuts';
+import { openFindPanel } from '../../editor/search';
 
 type ToolbarMenu = 'heading' | 'reference' | 'image' | 'note' | 'code' | 'math' | 'block';
 
@@ -98,6 +99,11 @@ export function EditorToolbar({ runCommand, view, onPickImage, mobile = false }:
     };
 
     return (<div aria-label={t('workspace.formatting_tools')} className={cn('editor-toolbar flex shrink-0 items-center overflow-x-auto border-b border-[var(--border-subtle)] px-2 no-scrollbar', mobile ? 'h-11 gap-1' : 'h-9 gap-0.5')}>
+      <ToolButton label={t('command.find_and_replace_in_this_note')} combo={editorCombo('find')} onClick={() => {
+        if (runCommand) runCommand(openFindPanel);
+        else if (view) openFindPanel(view);
+      }}><Search size={14}/></ToolButton>
+      <Divider />
       {menuButton('heading', <Heading size={14}/>)}
       <Divider />
       <ToolButton label={t('common.bold')} combo={editorCombo('bold')} onClick={run(toggleBold)}><Bold size={14}/></ToolButton>
